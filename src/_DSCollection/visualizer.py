@@ -11,9 +11,11 @@ from enum import IntEnum
 from collections import defaultdict
 from abc import ABC, abstractmethod
 from typing import List, Union, Tuple,DefaultDict
+from tqdm import tqdm
 
+from .common import check_path
 from .dataset import Dataset
-from .img_util import ImageUtil
+from .imgutil import ImageUtil
 
 _T_COLOR = Tuple[int, int, int]
 
@@ -28,24 +30,27 @@ MAX_VIS_CLASSES: int = 10
 
 class Visualizer:
 
-    def __init__(self, backend: Union[int, VBackend] = VBackend.OPENCV, cMap: str = "hsv"):
+    def __init__(self, backend: Union[int, VBackend] = VBackend.OPENCV, cMap: str = "hsv", **kwargs):
         if backend == VBackend.OPENCV:
-            self._bk = _OpenCV_Backend()
+            winName = kwargs.pop("winName", "Image")
+            self._bk = _OpenCV_Backend(winName)
         elif backend == VBackend.PYPLOT:
-            self._bk = _Pyplot_Backend()
+            rows = kwargs.pop("rows", 1)
+            cols = kwargs.pop("cols", 1)
+            self._bk = _Pyplot_Backend(rows, cols)
         else:
             msg = f"error: unknown vbackend: {backend}"
             raise RuntimeError(msg)
         self._buffer = Queue(maxsize=2)
-        self._cMap = get_cmap(MAX_VIS_CLASSES, cMap)
+        self._cMap = plt.cm.get_cmap(cMap, MAX_VIS_CLASSES)
         self._clsColorMap: DefaultDict[str, _T_COLOR] = defaultdict(self.new_color)
 
-    def new_color(self):
+    def new_color(self) -> _T_COLOR:
         idx = len(self._clsColorMap)
         while idx >= MAX_VIS_CLASSES:
             idx -= MAX_VIS_CLASSES
         c = self._cMap(len(self._clsColorMap))
-        return int(256*c[2]), int(256*c[1]), int(256*c[0])
+        return int(256*c[0]), int(256*c[1]), int(256*c[2])
 
     def _read_img(self, imgPaths: List[str]):
         for i, path in enumerate(imgPaths):
@@ -53,11 +58,20 @@ class Visualizer:
                 sys.stderr.write(f"warn: skip image not exist {path}")
             else:
                 imgRaw = open(path, 'rb').read()
-                self._buffer.put((i, imgRaw), block=True)
+                self._buffer.put((i, path, imgRaw), block=True)
         else:
-            self._buffer.put((None, None), block=True)
+            self._buffer.put((None, None, None), block=True)
 
-    def show(self, ds: Dataset, clsNames: List[str] = None, nImgs: Union[int, float] = 10, showName: bool = True):
+    def show(self, ds: Dataset,
+             clsNames: List[str] = None,
+             nImgs: Union[int, float] = 10,
+             showName: bool = True,
+             outputDir: str = None):
+
+        if outputDir is not None:
+            outputDir = check_path(outputDir, existence=True)
+            outputDir = os.path.join(outputDir, "AnnotatedImages")
+            os.makedirs(outputDir, exist_ok=True)
         ds.load(clsNames, nImgs)
         imgPaths = [os.path.join(ds.root, ds.imgDirName, l.fileName) for l in ds.labels]
 
@@ -65,9 +79,10 @@ class Visualizer:
         readThread.daemon = True
         readThread.start()
 
+        progress = tqdm(total=len(imgPaths), desc="Visualize Dataset")
         try:
             while True:
-                index, img = self._buffer.get(timeout=5)
+                index, path, img = self._buffer.get(timeout=5)
                 if img is None: break
                 img = ImageUtil.decode(img)
                 label = ds.labels[index]
@@ -80,9 +95,17 @@ class Visualizer:
                     if showName:
                         cv2.putText(img, clsName, (pt1[0], pt1[1] - 2), cv2.FONT_HERSHEY_PLAIN, 1.0, color, 1)
                 self._bk.visualize(img)
+                progress.update()
+                if outputDir is not None:
+                    outPath = os.path.join(outputDir, os.path.basename(path))
+                    cv2.imwrite(outPath, img)
+
         except Exception as e:
-            sys.stderr.write(str(e))
-            return
+            progress.close()
+            sys.stderr.write("error: %s\n" % e)
+            sys.exit(-1)
+        finally:
+            self._bk.release()
 
 
 class _VisBackend(ABC):
@@ -91,10 +114,14 @@ class _VisBackend(ABC):
     def visualize(self, image: np.ndarray):
         raise NotImplementedError
 
+    def release(self):
+        pass
+
 
 class _OpenCV_Backend(_VisBackend):
 
-    def __init__(self, winName: str = "Image"):
+    def __init__(self, winName: str = None):
+        if winName is None: winName = "Image"
         self.winName = winName
         self.window = cv2.namedWindow(winName)
 
@@ -105,13 +132,15 @@ class _OpenCV_Backend(_VisBackend):
         if k in [ord('q'), 27]:
             raise SystemExit
 
-    def __del__(self):
+    def release(self):
         cv2.destroyWindow(self.winName)
 
 
 class _Pyplot_Backend(_VisBackend):
 
-    def __init__(self, rows: int = 1, cols: int = 1):
+    def __init__(self, rows: int = None, cols: int = None):
+        if rows is None: rows = 1
+        if cols is None: cols = 1
         self.rows = rows
         self.cols = cols
         self._i = 1
@@ -125,27 +154,5 @@ class _Pyplot_Backend(_VisBackend):
         else:
             self._i += 1
 
-
-def get_cmap(n, name='prism'):
-    """
-    Returns a function that maps each index in 0, 1, ..., n-1 to a distinct
-    RGBA color; the keyword argument name must be a standard mpl colormap name.
-    [ColorMap](https://matplotlib.org/stable/api/_as_gen/matplotlib.colors.Colormap.html#matplotlib.colors.Colormap)
-    [ColorMap-Names](https://matplotlib.org/stable/gallery/color/colormap_reference.html)
-    @Params
-    -------
-    n (int):
-        Maps colors into a range of distinct int values [0, n-1]
-    name (string):
-        colorMap names, refer to the link `[ColorMap-Names]` for more details.
-    @Returns
-    -------
-        A colorMap instance, which is a callable function that takes an int number and returns a tuple
-        of RGBA color.
-    @Usage
-    ------
-    cmap = get_cmap(len(data))
-    for i, (X, Y) in enumerate(data):
-        scatter(X, Y, c=cmap(i))
-    """
-    return plt.cm.get_cmap(name, n)
+    def release(self):
+        plt.show()

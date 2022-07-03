@@ -2,6 +2,9 @@ import os
 import sys
 import contextlib
 
+_IMG_EXT = ('.png', '.jpg', '.jpeg', '.tiff', '.bmp')
+_VID_EXT = (".mp4", ".mkv", ".flv", ".avi", ".xmv", ".webm")
+
 
 def check_path(path: str, existence: bool = True):
     path = os.path.abspath(os.path.expanduser(path))
@@ -11,6 +14,14 @@ def check_path(path: str, existence: bool = True):
         prefix = f"Path {abj} exist: "
         raise Error(prefix + path)
     return path
+
+
+def is_image(path: str) -> bool:
+    return path.lower().endswith(_IMG_EXT)
+
+
+def is_video(path: str) -> bool:
+    return path.lower().endswith(_VID_EXT)
 
 
 @contextlib.contextmanager

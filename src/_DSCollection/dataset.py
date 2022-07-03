@@ -9,7 +9,7 @@ from typing import List, Tuple, Dict, Any, Union, Type
 from tqdm import tqdm
 from pycocotools.coco import COCO as coco
 
-from .common import check_path, silent
+from .common import check_path, silent, is_image
 from .voc import xml_to_dict
 
 _T_coord = Union[int, float]
@@ -68,19 +68,20 @@ class DatasetFormat(IntEnum):
         3. COCO
             Currently not supported.
     """
-    VOC     = 1 << 0
-    KITTI   = 1 << 1
-    COCO    = 1 << 2
+    VOC = 1 << 0
+    KITTI = 1 << 1
+    COCO = 1 << 2
 
 
 class Dataset(ABC):
     _known_ds = {}
     imgDirName: str
     lblDirName: str
+    lblExt: str
 
-    def __init__(self, root: str, ext: str):
+    @abstractmethod
+    def __init__(self, root: str):
         self.root = check_path(root, True)
-        self.ext = ext
         self.labels: List[ImageLabel] = []
 
     def __len__(self):
@@ -90,20 +91,10 @@ class Dataset(ABC):
         for label in self.labels:
             yield label
 
-    def __init_subclass__(cls, dtype=None, **kwargs):
+    def __init_subclass__(cls, _name: str = None, **kwargs):
         super().__init_subclass__(**kwargs)
-        if dtype is not None:
-            cls._known_ds[dtype] = cls
-        name = kwargs.pop("name", None)
-        if name is not None:
-            cls._known_ds[name] = cls
-
-    @classmethod
-    def from_type(cls, dtype: DatasetFormat) -> Type["Dataset"]:
-        if dtype not in cls._known_ds:
-            msg = f"Unknown dataset type {dtype}"
-            raise TypeError(msg)
-        return cls._known_ds[dtype]
+        if _name is not None:
+            cls._known_ds[_name] = cls
 
     @classmethod
     def from_name(cls, name: str) -> Type["Dataset"]:
@@ -119,6 +110,29 @@ class Dataset(ABC):
         os.makedirs(os.path.join(root, cls.imgDirName))
         os.makedirs(os.path.join(root, cls.lblDirName))
         return root
+
+    @classmethod
+    def check_is_correct_path(cls, root: str) -> bool:
+        try:
+            check_path(root, existence=True)
+            check_path(os.path.join(root, cls.imgDirName), existence=True)
+            check_path(os.path.join(root, cls.lblDirName), existence=True)
+        except FileNotFoundError:
+            return False
+        else:
+            return True
+
+    @classmethod
+    def find_dataset(cls, root: str) -> Union[Type["Dataset"], None]:
+        check_path(root, existence=True)
+        for klass in cls._known_ds.values():
+            if klass.check_is_correct_path(root):
+                return klass
+        return None
+
+    @classmethod
+    def get_known_datasets(cls):
+        return list(cls._known_ds.keys())
 
     @abstractmethod
     def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
@@ -138,15 +152,15 @@ class Dataset(ABC):
         raise NotImplementedError
 
 
-class VOC(Dataset):
+class VOC(Dataset, _name="voc"):
     imgDirName = "JPEGImages"
     lblDirName = "Annotations"
+    lblExt = ".xml"
 
-    def __init__(self, root: str, ext: str = ".jpg"):
-        super(VOC, self).__init__(root, ext)
+    def __init__(self, root: str):
+        super(VOC, self).__init__(root)
 
     def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
-
         if isinstance(nImgs, float):
             if nImgs <= 0.0 or nImgs > 1.0:
                 msg = "nImgs must be float between (0.0, 1.0]"
@@ -154,24 +168,30 @@ class VOC(Dataset):
 
         imageRoot = os.path.join(self.root, self.imgDirName)
         labelRoot = os.path.join(self.root, self.lblDirName)
-        labelFnames = [p for p in os.listdir(labelRoot) if p.endswith(".xml")]
-        imageFnames = [os.path.splitext(p)[0] + self.ext for p in labelFnames]
+        imageFnames = [p for p in os.listdir(imageRoot) if is_image(p)]
+        labelFnames = [os.path.splitext(p)[0] + self.lblExt for p in imageFnames]
         imagePaths = [os.path.join(imageRoot, name) for name in imageFnames]
         labelPaths = [os.path.join(labelRoot, name) for name in labelFnames]
+        if len(imagePaths) != len(labelPaths):
+            msg = "Images not match with labels, dataset corrupted"
+            raise RuntimeError(msg)
         if not all(map(os.path.exists, imagePaths)):
-            msg = "Images are not match with labels, dataset corrupted!"
+            msg = "Not all images exists, dataset corrupted"
+            raise RuntimeError(msg)
+        if not all(map(os.path.exists, labelPaths)):
+            msg = "Not all labels exists, dataset corrupted"
             raise RuntimeError(msg)
 
-        if isinstance(nImgs, float):
-            nImgs = int(nImgs * len(imagePaths))
-
-        if isinstance(nImgs, int):
-            indices = random.sample(list(range(len(imagePaths))), k=min(nImgs, len(imagePaths)))
-            labelPaths = [labelPaths[i] for i in indices]
-            imageFnames = [imageFnames[i] for i in indices]
-        else:
-            msg = "nImgs must be an integer or float number"
-            raise RuntimeError(msg)
+        if nImgs is not None:
+            if isinstance(nImgs, float):
+                nImgs = int(nImgs * len(imagePaths))
+            if isinstance(nImgs, int):
+                indices = random.sample(list(range(len(imagePaths))), k=min(nImgs, len(imagePaths)))
+                labelPaths = [labelPaths[i] for i in indices]
+                imageFnames = [imageFnames[i] for i in indices]
+            else:
+                msg = "nImgs must be an integer or float number"
+                raise RuntimeError(msg)
 
         labels = []
         progress = tqdm(zip(imageFnames, labelPaths), total=len(imageFnames), desc="Load dataset")
@@ -214,11 +234,13 @@ class VOC(Dataset):
             return ImageLabel(imgName, boxes, width, height, depth)
 
 
-class KITTI(VOC):
+class KITTI(VOC, _name="kitti"):
+    imgDirName = "images"
+    lblDirName = "labels"
+    lblExt = ".txt"
 
-    def __init__(self, root: str, ext: str = ".png",
-                 imgDir: str = "images", lblDir: str = "labels"):
-        super(KITTI, self).__init__(root, ext)
+    def __init__(self, root: str, imgDir: str = "images", lblDir: str = "labels"):
+        super(KITTI, self).__init__(root)
         self.imgDirName = imgDir
         self.lblDirName = lblDir
 
@@ -245,17 +267,18 @@ class KITTI(VOC):
             return ImageLabel(imgName, boxes)
 
 
-class COCO(Dataset):
+class COCO(Dataset, _name="coco"):
     lblDirName = "annotations"
+    imgDirName = "{split}{year}"
 
     SPLITS = ["train", "val", "test"]
     YEARS = [2017]
 
-    def __init__(self, root: str, ext: str = ".jpg", split: str = "train", year: int = 2017):
-        super(COCO, self).__init__(root, ext)
+    def __init__(self, root: str, split: str = "train", year: int = 2017):
+        super(COCO, self).__init__(root)
         assert split in self.SPLITS, f"split must be one of {self.SPLITS}"
         assert year in self.YEARS, f"year must be one of {self.YEARS}"
-        self.imgDirName = split + str(year)
+        self.imgDirName.format(split=split, year=year)
 
     def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
 
@@ -272,7 +295,7 @@ class COCO(Dataset):
         if clsNames is None:
             clsNames = []
         catIds = _coco.getCatIds(catNms=clsNames)
-        mapId2Cls = dict( (d["id"], d["name"]) for d in _coco.loadCats(catIds) )
+        mapId2Cls = dict((d["id"], d["name"]) for d in _coco.loadCats(catIds))
         imgIds = set()
         for catId in catIds:
             imgId_list = _coco.getImgIds(catIds=[catId])
@@ -339,3 +362,11 @@ class COCO(Dataset):
             return ImageLabel(imgName, boxes, width, height, depth), imgInfo
         else:
             return None, imgInfo
+
+
+class WiderFace(Dataset, _name="wider-face"):
+    ...
+
+
+class WiderPersion(Dataset, _name="wider-person"):
+    ...

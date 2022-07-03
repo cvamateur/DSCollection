@@ -45,11 +45,11 @@ class Convertor(ABC):
     lblDirName = "labels"
 
     @classmethod
-    def from_type(cls, dtype: DatasetFormat) -> Type["Convertor"]:
-        if dtype not in cls._known_cvt:
-            msg = f"Unknown dataset type: {dtype}"
-            raise TypeError(msg)
-        return cls._known_cvt[dtype]
+    def from_name(cls, name: str) -> Type["Convertor"]:
+        if name not in cls._known_cvt:
+            msg = f"Unknown dataset type: {name}"
+            raise ValueError(msg)
+        return cls._known_cvt[name]
 
     @abstractmethod
     def convert(self, ds: Dataset) -> List[LabelInfo]:

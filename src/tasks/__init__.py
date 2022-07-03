@@ -1,6 +1,1 @@
-from DSCollection.src.DSCollection import Visualizer
-
-
-def main():
-
-    vis = Visualizer()
+from .task import TASK

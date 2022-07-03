@@ -13,7 +13,7 @@ from .._DSCollection.convertor import KITTIConvertor
 
 from .._DSCollection.extractor import DataExtractor
 
-from .._DSCollection.img_util import ImageUtil
+from .._DSCollection.imgutil import ImageUtil
 
 from .._DSCollection.visualizer import VBackend
 from .._DSCollection.visualizer import Visualizer
