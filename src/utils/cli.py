@@ -14,14 +14,10 @@ class ArgumentParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
-class InputAction(argparse.Action):
-    ...
-
-
 def get_cli_parser() -> ArgumentParser:
-    mainParser = build_common_arguments()
+    mainParser = ArgumentParser(add_help=False, epilog=TASK.__doc__, formatter_class=argparse.RawTextHelpFormatter)
     mainParser.add_argument("-v", "--version", action="version", version=f"DSCollection {v}")
-    tasks = mainParser.add_subparsers(title="_DSCollection commands", dest="task", required=True)
+    tasks = mainParser.add_subparsers(title="DSCollection commands", dest="task", required=True)
 
     # Add generate task parser
     generateParser = tasks.add_parser(TASK.GENERATE)
@@ -37,7 +33,7 @@ def get_cli_parser() -> ArgumentParser:
 
     # Add visualize task parser
     visualizeParser = tasks.add_parser(TASK.VISUALIZE)
-    build_common_arguments(visualizeParser)
+    build_common_arguments(visualizeParser, output_required=False)
     add_visualize_task_arguments(visualizeParser)
 
     # Add split task parser
@@ -49,15 +45,14 @@ def get_cli_parser() -> ArgumentParser:
     combineParser = tasks.add_parser(TASK.COMBINE)
     build_common_arguments(combineParser)
     add_combine_task_argument(combineParser)
-
     return mainParser
 
 
-def build_common_arguments(parser: ArgumentParser = None, *, usage: str = None):
+def build_common_arguments(parser: ArgumentParser = None, *, usage: str = None, output_required: bool = True):
     if parser is None:
         parser = ArgumentParser(add_help=False, usage=usage)
-    parser.add_argument("-i", "--input", nargs="+", help="Input video or directory.")
-    parser.add_argument("-o", "--output", help="Output directory.")
+    parser.add_argument("-i", "--input", nargs="+", required=True, help="Input video or directory.")
+    parser.add_argument("-o", "--output", required=output_required,  help="Output directory.")
     parser.add_argument("-c", "--contiguous", action="store_true", help="Rename files sequentially.")
     return parser
 
@@ -85,7 +80,7 @@ def add_generate_task_arguments(parser: ArgumentParser):
 
 
 def add_extract_task_arguments(parser: ArgumentParser):
-    ...
+    parser.add_argument("-cls", "--classes", help="Classes to extract, separate by ';'.")
 
 
 def add_visualize_task_arguments(parser: ArgumentParser):
