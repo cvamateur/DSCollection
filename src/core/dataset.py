@@ -3,7 +3,6 @@ import sys
 import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import IntEnum
 from typing import List, Tuple, Dict, Any, Union, Type
 
 from tqdm import tqdm
@@ -54,7 +53,7 @@ class ImageLabel:
     depth: int = field(default=-1)
 
 
-class DatasetFormat(IntEnum):
+class DatasetType:
     """
     DsCollection legacy output one the three types dataset formats:
         1. VOC:
@@ -68,9 +67,9 @@ class DatasetFormat(IntEnum):
         3. COCO
             Currently not supported.
     """
-    VOC = 1 << 0
-    KITTI = 1 << 1
-    COCO = 1 << 2
+    VOC     = "VOC"
+    KITTI   = "KITTI"
+    COCO    = "COCO"
 
 
 class Dataset(ABC):
@@ -91,17 +90,17 @@ class Dataset(ABC):
         for label in self.labels:
             yield label
 
-    def __init_subclass__(cls, _name: str = None, **kwargs):
+    def __init_subclass__(cls, dtype: str = None, **kwargs):
         super().__init_subclass__(**kwargs)
-        if _name is not None:
-            cls._known_ds[_name] = cls
+        if dtype is not None:
+            cls._known_ds[dtype] = cls
 
     @classmethod
-    def from_name(cls, name: str) -> Type["Dataset"]:
-        if name not in cls._known_ds:
-            msg = f"Unknown dataset name {name}"
+    def from_type(cls, dtype: str) -> Type["Dataset"]:
+        if dtype not in cls._known_ds:
+            msg = f"Unknown dataset name {dtype}"
             raise ValueError(msg)
-        return cls._known_ds[name]
+        return cls._known_ds[dtype]
 
     @classmethod
     def create_structure(cls, dstDir: str, dsName: str) -> str:
@@ -152,7 +151,7 @@ class Dataset(ABC):
         raise NotImplementedError
 
 
-class VOC(Dataset, _name="voc"):
+class VOC(Dataset, dtype=DatasetType.VOC):
     imgDirName = "JPEGImages"
     lblDirName = "Annotations"
     lblExt = ".xml"
@@ -234,7 +233,7 @@ class VOC(Dataset, _name="voc"):
             return ImageLabel(imgName, boxes, width, height, depth)
 
 
-class KITTI(VOC, _name="kitti"):
+class KITTI(VOC, dtype=DatasetType.KITTI):
     imgDirName = "images"
     lblDirName = "labels"
     lblExt = ".txt"
@@ -267,7 +266,7 @@ class KITTI(VOC, _name="kitti"):
             return ImageLabel(imgName, boxes)
 
 
-class COCO(Dataset, _name="coco"):
+class COCO(Dataset, dtype=DatasetType.COCO):
     lblDirName = "annotations"
     imgDirName = "{split}{year}"
 
@@ -364,9 +363,9 @@ class COCO(Dataset, _name="coco"):
             return None, imgInfo
 
 
-class WiderFace(Dataset, _name="wider-face"):
+class WiderFace(Dataset):
     ...
 
 
-class WiderPersion(Dataset, _name="wider-person"):
+class WiderPersion(Dataset):
     ...

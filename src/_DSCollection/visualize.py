@@ -1,8 +1,10 @@
+from ..utils.tasks import TaskDispatcher, TASK
 from ..core.visualizer import Visualizer
 from ..core.dataset import Dataset
 
 
-def main(args) -> int:
+@TaskDispatcher(TASK.VISUALIZE)
+def main_visualize(args) -> int:
     if args.show_color_map:
         print("""    Colormaps in Matplotlib
     ------------------------

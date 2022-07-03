@@ -1,22 +1,8 @@
 import argparse
 import sys
 
-
-class TASK:
-    # Extract classes from dataset
-    EXTRACT = "extract"
-
-    # Generate new dataset from raw fisheye video
-    GENERATE = "generate"
-
-    # Visualize and annotating images from dataset
-    VISUALIZE = "visualize"
-
-    # Merge multiple dataset into one
-    COMBINE = "combine"
-
-    # Split one dataset into multiple parts
-    SPLIT = "split"
+from .tasks import TASK
+from ..core.dataset import DatasetType
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -27,7 +13,7 @@ class ArgumentParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
-def get_main_parser() -> ArgumentParser:
+def get_cli_parser() -> ArgumentParser:
     mainParser = build_common_arguments()
     tasks = mainParser.add_subparsers(title="_DSCollection commands", dest="task", required=True)
 
@@ -80,10 +66,10 @@ def add_process_arguments(parser: ArgumentParser):
 
 def add_output_dtypes_arguments(parser: ArgumentParser):
     parser.add_argument("--ext", help="Image file extension.")
-    gp = parser.add_mutually_exclusive_group(required=False)
-    gp.add_argument('--voc', action="store_true", help="Save as PascalVOC dataset.")
-    gp.add_argument('--kitti', action="store_true", default=True, help="Save as KITTI dataset")
-    gp.add_argument('--coco', action="store_true", help="Save as COCO dataset.")
+    gp = parser.add_mutually_exclusive_group(required=True)
+    gp.add_argument('--voc', dest="dtype", action="store_const", const=DatasetType.VOC, help="Save as VOC.")
+    gp.add_argument('--kitti', dest="dtype", action="store_const", const=DatasetType.KITTI, help="Save as KITTI.")
+    gp.add_argument('--coco', dest="dtype", action="store_const", const=DatasetType.COCO, help="Save as COCO.")
     return parser
 
 

@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Type, Union
 from tqdm import tqdm
 
 from src.utils.voc import dict_to_xml, pretty_xml
-from .dataset import Dataset, DatasetFormat, ImageLabel
+from .dataset import Dataset, DatasetType, ImageLabel
 
 
 @dataclasses.dataclass(frozen=True, repr=False, eq=False)
@@ -45,23 +45,23 @@ class Convertor(ABC):
     lblDirName = "labels"
 
     @classmethod
-    def from_name(cls, name: str) -> Type["Convertor"]:
-        if name not in cls._known_cvt:
-            msg = f"Unknown dataset type: {name}"
+    def from_type(cls, dtype: str) -> Type["Convertor"]:
+        if dtype not in cls._known_cvt:
+            msg = f"Unknown dataset type: {dtype}"
             raise ValueError(msg)
-        return cls._known_cvt[name]
+        return cls._known_cvt[dtype]
 
     @abstractmethod
     def convert(self, ds: Dataset) -> List[LabelInfo]:
         raise NotImplementedError
 
-    def __init_subclass__(cls, dtype=None, **kwargs):
+    def __init_subclass__(cls, dtype: str = None, **kwargs):
         super().__init_subclass__(**kwargs)
         if dtype is not None:
             cls._known_cvt[dtype] = cls
 
 
-class VOCConvertor(Convertor, dtype=DatasetFormat.VOC):
+class VOCConvertor(Convertor, dtype=DatasetType.VOC):
     lblExt = ".xml"
     imgDirName = "JPEGImages"
     lblDirName = "Annotations"
@@ -118,7 +118,7 @@ class VOCConvertor(Convertor, dtype=DatasetFormat.VOC):
         return LabelInfo(index, xml_str, label.fileName)
 
 
-class KITTIConvertor(VOCConvertor, dtype=DatasetFormat.KITTI):
+class KITTIConvertor(VOCConvertor, dtype=DatasetType.KITTI):
     lblExt = ".txt"
     imgDirName = "images"
     lblDirName = "labels"
