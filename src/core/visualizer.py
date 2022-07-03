@@ -94,24 +94,27 @@ class Visualizer:
                     cv2.rectangle(img, pt1, pt2, color, 1, cv2.LINE_AA)
                     if showName:
                         cv2.putText(img, clsName, (pt1[0], pt1[1] - 2), cv2.FONT_HERSHEY_PLAIN, 1.0, color, 1)
-                self._bk.visualize(img)
+
+                if not self._bk.visualize(img):
+                    raise SystemExit
                 progress.update()
                 if outputDir is not None:
                     outPath = os.path.join(outputDir, os.path.basename(path))
                     cv2.imwrite(outPath, img)
-
+        except SystemExit:
+            sys.exit(0)
         except Exception as e:
-            progress.close()
             sys.stderr.write("error: %s\n" % e)
             sys.exit(-1)
         finally:
             self._bk.release()
+            progress.clear()
 
 
 class _VisBackend(ABC):
 
     @abstractmethod
-    def visualize(self, image: np.ndarray):
+    def visualize(self, image: np.ndarray) -> bool:
         raise NotImplementedError
 
     def release(self):
@@ -124,13 +127,15 @@ class _OpenCV_Backend(_VisBackend):
         if winName is None: winName = "Image"
         self.winName = winName
         self.window = cv2.namedWindow(winName)
+        sys.stdout.write("OpenCV backend, press ANY key slide; press `q` to exit\n")
 
     def visualize(self, image: np.ndarray):
-
         cv2.imshow(self.winName, image)
         k = cv2.waitKey(0) & 0xFF
-        if k in [ord('q'), 27]:
-            raise SystemExit
+        if k == ord('q'):
+            return False
+        else:
+            return True
 
     def release(self):
         cv2.destroyWindow(self.winName)
@@ -144,6 +149,7 @@ class _Pyplot_Backend(_VisBackend):
         self.rows = rows
         self.cols = cols
         self._i = 1
+        sys.stdout.write("Matplotlib backend: press 'q' to slide\n")
 
     def visualize(self, image: np.ndarray):
         plt.subplot(self.rows, self.rows, self._i)
@@ -153,6 +159,7 @@ class _Pyplot_Backend(_VisBackend):
             self._i = 1
         else:
             self._i += 1
+        return True
 
     def release(self):
         plt.show()

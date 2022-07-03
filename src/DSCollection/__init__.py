@@ -7,4 +7,5 @@ from .._DSCollection import split
 from .._DSCollection import visualize
 
 
-__version__ = "1.0.0"
+from .._DSCollection import __version__
+

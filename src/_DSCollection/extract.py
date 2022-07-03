@@ -3,6 +3,6 @@ from ..core.extractor import DataExtractor
 
 
 @TaskDispatcher(TASK.EXTRACT)
-def main_extract(args):
+def main(args):
     print(args)
 

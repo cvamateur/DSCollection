@@ -3,6 +3,7 @@ import sys
 
 from .tasks import TASK
 from ..core.dataset import DatasetType
+from .._DSCollection import __version__ as v
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -13,8 +14,13 @@ class ArgumentParser(argparse.ArgumentParser):
         sys.exit(2)
 
 
+class InputAction(argparse.Action):
+    ...
+
+
 def get_cli_parser() -> ArgumentParser:
     mainParser = build_common_arguments()
+    mainParser.add_argument("-v", "--version", action="version", version=f"DSCollection {v}")
     tasks = mainParser.add_subparsers(title="_DSCollection commands", dest="task", required=True)
 
     # Add generate task parser
@@ -86,7 +92,7 @@ def add_visualize_task_arguments(parser: ArgumentParser):
     parser.add_argument("-l", "--label", action="store_true", help="Show label names.")
     parser.add_argument("-n", "--num-images", type=int, default=10, help="Number images to show.")
     parser.add_argument("--class-names", help="A string of class names seperated by ';'.")
-    parser.add_argument("--backend", type=int, default=1, help="0: OpenCV; 1: Matplotlib (default)")
+    parser.add_argument("--backend", type=int, default=0, help="0: OpenCV (default); 1: Matplotlib.")
     parser.add_argument("--color-map", default="hsv", help="Colormap Name. Use --show-color-map show all names.")
     parser.add_argument("--show-color-map", action="store_true", help="Show all color map names.")
     parser.add_argument("--rows", type=int, help="Number rows in an image (Matplotlib only).")

@@ -4,7 +4,7 @@ from ..core.dataset import Dataset
 
 
 @TaskDispatcher(TASK.VISUALIZE)
-def main_visualize(args) -> int:
+def main(args) -> int:
     if args.show_color_map:
         print("""    Colormaps in Matplotlib
     ------------------------
@@ -43,6 +43,8 @@ def main_visualize(args) -> int:
         """)
         return 0
 
+    if isinstance(args.input, list):
+        args.input = args.input[0]
     DataKlass = Dataset.find_dataset(args.input)
     if DataKlass is None:
         return -1

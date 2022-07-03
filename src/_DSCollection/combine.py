@@ -3,7 +3,7 @@ from ..core.reorganize import DatasetCombiner
 
 
 @TaskDispatcher(TASK.COMBINE)
-def main_combine(args):
+def main(args):
     if args.output is None:
         msg = "Output directory is None"
         raise ValueError(msg)
