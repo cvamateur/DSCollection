@@ -1,6 +1,6 @@
 import sys
 
-from .._DSCollection.reorganize import DatasetSplitter
+from ..core.reorganize import DatasetSplitter
 
 
 def main(args):

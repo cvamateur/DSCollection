@@ -1,7 +1,22 @@
 import argparse
 import sys
 
-from .task import TASK
+
+class TASK:
+    # Extract classes from dataset
+    EXTRACT = "extract"
+
+    # Generate new dataset from raw fisheye video
+    GENERATE = "generate"
+
+    # Visualize and annotating images from dataset
+    VISUALIZE = "visualize"
+
+    # Merge multiple dataset into one
+    COMBINE = "combine"
+
+    # Split one dataset into multiple parts
+    SPLIT = "split"
 
 
 class ArgumentParser(argparse.ArgumentParser):
@@ -14,7 +29,7 @@ class ArgumentParser(argparse.ArgumentParser):
 
 def get_main_parser() -> ArgumentParser:
     mainParser = build_common_arguments()
-    tasks = mainParser.add_subparsers(title="tasks commands", dest="task", required=True)
+    tasks = mainParser.add_subparsers(title="_DSCollection commands", dest="task", required=True)
 
     # Add generate task parser
     generateParser = tasks.add_parser(TASK.GENERATE)

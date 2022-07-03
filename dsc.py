@@ -3,14 +3,14 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from src.tasks import cli as cli
+import src.utils.cli as cli
 
 
 def main():
     args = cli.get_main_parser().parse_args()
 
     if args.task == cli.TASK.VISUALIZE:
-        from src.tasks.visualize import main
+        from src._DSCollection.visualize import main
         args.input = args.input[0]
         return main(args)
 
@@ -21,11 +21,11 @@ def main():
         return
 
     if args.task == cli.TASK.COMBINE:
-        from src.tasks.combine import main
+        from src._DSCollection.combine import main
         return main(args)
 
     if args.task == cli.TASK.SPLIT:
-        from src.tasks.split import main
+        from src._DSCollection.split import main
         return main(args)
 
 

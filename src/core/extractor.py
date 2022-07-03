@@ -5,7 +5,7 @@ from typing import List
 
 from tqdm import tqdm
 
-from .common import check_path
+from src.utils.common import check_path
 from .dataset import Dataset
 from .convertor import Convertor, LabelInfo
 

@@ -1,6 +1,6 @@
 import sys
 
-from .._DSCollection.reorganize import DatasetCombiner
+from ..core.reorganize import DatasetCombiner
 
 
 def main(args):

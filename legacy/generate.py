@@ -462,13 +462,13 @@ def build_pipeline(args):
         probe_func = ProbeFunction(unique_id)
         probe_func.is_last = (i == len(args.model) - 1)
         probe_func.is_first = (i == 0)
-        srcpad = pgie.get_static_pad("_DSCollection")
+        srcpad = pgie.get_static_pad("core")
         srcpad.add_probe(Gst.PadProbeType.BUFFER, probe_func, args)
         g_gie_probe_list[i] = probe_func
 
     # Make sure add at least one probe function on last element
     if all(func is None for func in g_gie_probe_list):
-        src_pad = last.get_static_pad("_DSCollection")
+        src_pad = last.get_static_pad("core")
         probe_func = ProbeFunction(-1)
         probe_func.is_last = True
         probe_func.is_first = True

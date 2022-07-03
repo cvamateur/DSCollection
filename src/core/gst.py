@@ -27,9 +27,9 @@ def cb_pad_added(decodebin, new_pad, user_data):
     if gstname.find("video") != -1:
         features = caps.get_features(0)
         if features.contains("memory:NVMM"):
-            bin_ghost_pad = nBin.get_static_pad("_DSCollection")
+            bin_ghost_pad = nBin.get_static_pad("core")
             if not bin_ghost_pad.set_target(new_pad):
-                _exit_with_msg("Failed to link decoder _DSCollection pad to source bin ghost pad")
+                _exit_with_msg("Failed to link decoder core pad to source bin ghost pad")
         else:
             _exit_with_msg("Decodebin can't find appropriate video decoder plugin")
 
@@ -73,7 +73,7 @@ def build_uri_source(index: int, uri: str, args):
     decodebin.connect("child-added", cb_child_added, (args.skip_mode, args.interval, args.gpu_id))
 
     nBin.add(decodebin)
-    ghost_src_pad = Gst.GhostPad.new_no_target("_DSCollection", Gst.PadDirection.SRC)
+    ghost_src_pad = Gst.GhostPad.new_no_target("core", Gst.PadDirection.SRC)
     bin_pad = nBin.add_pad(ghost_src_pad)
     if not bin_pad:
         _exit_with_msg("Failed to add ghost pad in source bin")
@@ -120,7 +120,7 @@ def build_preprocess(index: int, args):
     conv0.set_property("gpu-id", args.gpu_id)
     conv0.set_property("nvbuf-memory-type", args.mem_type)
     conv0.set_property("flip-method", 3)
-    conv0.set_property("_DSCollection-crop", _cam_crop(0, cam_shift, crop_size))
+    conv0.set_property("core-crop", _cam_crop(0, cam_shift, crop_size))
     conv0.set_property("dest-crop", f"0:0:{crop_size}:{crop_size}")
     filt0.set_property("caps", Gst.Caps.from_string(caps_str))
 
@@ -131,7 +131,7 @@ def build_preprocess(index: int, args):
     conv1.set_property("gpu-id", args.gpu_id)
     conv1.set_property("nvbuf-memory-type", args.mem_type)
     conv1.set_property("flip-method", 1)
-    conv1.set_property("_DSCollection-crop", _cam_crop(1, cam_shift, crop_size))
+    conv1.set_property("core-crop", _cam_crop(1, cam_shift, crop_size))
     conv1.set_property("dest-crop", f"0:0:{crop_size}:{crop_size}")
     filt1.set_property("caps", Gst.Caps.from_string(caps_str))
 
@@ -155,8 +155,8 @@ def build_preprocess(index: int, args):
     conv1.link(filt1)
 
     sinkpad = tee.get_static_pad("sink")
-    srcpad0 = filt0.get_static_pad("_DSCollection")
-    srcpad1 = filt1.get_static_pad("_DSCollection")
+    srcpad0 = filt0.get_static_pad("core")
+    srcpad1 = filt1.get_static_pad("core")
     ghost_sink = Gst.GhostPad.new("sink", sinkpad)
     ghost_src0 = Gst.GhostPad.new("src_0", srcpad0)
     ghost_src1 = Gst.GhostPad.new("src_1", srcpad1)
@@ -168,7 +168,7 @@ def build_preprocess(index: int, args):
 
 def build_image_source(pattern: str = "%08d", start_index: int = 0, ext: str = ".png"):
 
-    name = "image-_DSCollection"
+    name = "image-core"
     nBin = Gst.Bin.new(name)
     _assert_make_element(nBin)
 
@@ -189,8 +189,8 @@ def build_image_source(pattern: str = "%08d", start_index: int = 0, ext: str = "
     nBin.add(imgdec)
     multifiles.link(imgdec)
 
-    srcpad = imgdec.get_static_pad("_DSCollection")
-    ghost_src = Gst.GhostPad.new("_DSCollection", srcpad)
+    srcpad = imgdec.get_static_pad("core")
+    ghost_src = Gst.GhostPad.new("core", srcpad)
     nBin.add_pad(ghost_src)
 
     return nBin

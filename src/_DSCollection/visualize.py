@@ -1,5 +1,5 @@
-from .._DSCollection.visualizer import Visualizer
-from .._DSCollection.dataset import Dataset
+from ..core.visualizer import Visualizer
+from ..core.dataset import Dataset
 
 
 def main(args) -> int:
