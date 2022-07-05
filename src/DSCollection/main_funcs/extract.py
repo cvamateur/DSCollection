@@ -1,7 +1,7 @@
-from DSCollection.utils.tasks import TaskDispatcher, TASK
-from DSCollection.core import DataExtractor
-from DSCollection.core.convertor import Convertor
-from DSCollection.core import Dataset
+from ..utils.tasks import TaskDispatcher, TASK
+from ..core.extractor import DataExtractor
+from ..core.convertor import Convertor
+from ..core.dataset import Dataset
 
 
 @TaskDispatcher(TASK.EXTRACT)

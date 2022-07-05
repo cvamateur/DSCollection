@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Union
 from tqdm import tqdm
 
-from DSCollection.utils import check_path
+from ..utils.common import check_path
 from .dataset import Dataset
 
 

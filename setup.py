@@ -10,6 +10,7 @@ setup(
     author_email="chris.lq@hotmail.com",
     version="1.0.0",  # 0.0.x is imply it unstable
     description="A collection of tools ease of dataset manipulation",
+    scripts=["bin/dsc"],
     packages=find_packages("src"),  # a list of actual python modules
     package_dir={"": "src"},
     classifiers=[

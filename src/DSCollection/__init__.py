@@ -1,2 +1,2 @@
-from .utils.tasks import TaskDispatcher
-from .utils.cli import get_cli_parser
+from ._DSCollection import TaskDispatcher
+from ._DSCollection import get_cli_parser

@@ -3,9 +3,9 @@ import sys
 import ast
 
 from .tasks import TASK
-from DSCollection.core.dataset import DatasetType
-from DSCollection._DSCollection import __version__ as v
-from DSCollection._DSCollection.visualize import get_colormap_info
+from ..core.dataset import DatasetType
+from ..main_funcs import __version__ as v
+from ..main_funcs.visualize import get_colormap_info
 
 OPTSEP = ','
 

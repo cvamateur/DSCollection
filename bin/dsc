@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import sys
+
 from DSCollection import TaskDispatcher, get_cli_parser
 
 
 def main():
     args = get_cli_parser().parse_args()
-    main = TaskDispatcher.get_task_handler(args.task)
-    return main(args)
+    task_main_func = TaskDispatcher.get_task_handler(args.task)
+    return task_main_func(args)
 
 
 if __name__ == '__main__':

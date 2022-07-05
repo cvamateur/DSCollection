@@ -14,8 +14,8 @@ from typing import List, Union, Tuple,DefaultDict
 from tqdm import tqdm
 
 from ..utils.common import check_path
+from ..utils.imgutil import ImageUtil
 from .dataset import Dataset
-from DSCollection.utils.imgutil import ImageUtil
 
 _T_COLOR = Tuple[int, int, int]
 

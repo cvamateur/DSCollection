@@ -1,4 +1,4 @@
-from DSCollection.utils.tasks import TaskDispatcher, TASK
+from ..utils.tasks import TaskDispatcher, TASK
 
 
 @TaskDispatcher(TASK.GENERATE)
