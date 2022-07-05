@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from data_tools import BBox, Dataset, get_dataset
 from gst_bins import build_uri_source, build_image_source, build_preprocess
 
+
 g_count: int = 0                    # The number of consecutive frames that have been processed
 g_num_srcs: int = 0                 # Number of sources already in pipeline
 g_uri_stack: List[str]              # Dynamic array containing all URIs to be processed
@@ -42,8 +43,7 @@ futures: Deque[Future] = deque()
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", "--type", type=str, default="video",
-                        help="Input path type, must be one of `video` or `image`.")
+    parser.add_argument("-t", "--type", type=str, default="video", help="Input path type, must be one of `video` or `image`.")
     parser.add_argument("-i", "--input", nargs='*', required=True, help="Input video/images or directory path.")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output directory.")
     parser.add_argument("-n", "--name", type=str, default="GeneratedDateset", help="Name of generated dataset.")
@@ -64,8 +64,7 @@ def get_args():
     parser.add_argument("--inplace", action="store_true", help="Merge generated dataset labels.")
 
     parser.add_argument("--max-srcs", type=int, default=2, help="Maximum number of sources (default: 2).")
-    parser.add_argument("--skip-mode", type=int, default=0,
-                        help="Frame skipping mode. [0:all(default), 1:non_ref[Jetson], 2:key]")
+    parser.add_argument("--skip-mode", type=int, default=0, help="Frame skipping mode. [0:all(default), 1:non_ref[Jetson], 2:key]")
     parser.add_argument("--interval", type=int, default=2, help="Frame interval to decode (default: 0).")
     parser.add_argument("--mem-type", type=int, default=3, help="NvBuf memory type.")
     parser.add_argument("--gpu-id", type=int, default=0, metavar="GPU_ID")
@@ -411,8 +410,8 @@ def delete_video_sources(args):
 def add_image_source(args):
     global pipeline
     global streammux
-    img_src = build_image_source()
 
+    img_src = build_image_source()
 
 
 
