@@ -34,6 +34,19 @@ class LabelInfo:
     data: bytes
     imgName: str
 
+    def __getstate__(self):
+        return dict(
+            (slot, getattr(self, slot))
+            for slot in self.__slots__
+            if hasattr(self, slot)
+        )
+
+    def __setstate__(self, state):
+        # BUG FIX: Unpickable frozen dataclasses
+        # https://stackoverflow.com/questions/55307017/pickle-a-frozen-dataclass-that-has-slots
+        for slot, value in state.items():
+            object.__setattr__(self, slot, value)
+
 
 path_join = os.path.join
 
@@ -69,6 +82,7 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
     def __init__(self):
         super(VOCConvertor, self).__init__()
         self.n_workers = os.cpu_count() - 1
+        self._last_n = 0
 
     def convert(self, ds: Dataset) -> List[LabelInfo]:
         results: List[Union[LabelInfo, None]] = [None] * len(ds.labels)
@@ -76,13 +90,14 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
         futures = []
         with ProcessPoolExecutor(self.n_workers) as executor:
             for i, label in enumerate(ds.labels):
-                future = executor.submit(self.cvt_label, i, label)
+                future = executor.submit(self.cvt_label, self._last_n + i, label)
                 futures.append(future)
 
             for future in tqdm(as_completed(futures), total=len(futures), desc="Convert dataset"):
                 lblInfo: LabelInfo = future.result()
                 results[lblInfo.index] = lblInfo
 
+        self._last_n += len(ds.labels)
         return results
 
     @staticmethod

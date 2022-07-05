@@ -8,8 +8,6 @@ import matplotlib.pyplot as plt
 
 from collections.abc import Callable
 
-
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from DSCollection.src._DSCollection import xml_to_dict
 

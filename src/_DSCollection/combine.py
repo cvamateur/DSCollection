@@ -8,4 +8,4 @@ def main(args):
         msg = "Output directory is None"
         raise ValueError(msg)
     c = DatasetCombiner(args.input)
-    c.run(args.output, args.contiguous, args.keep)
+    c.run(args.output, args.contiguous, args.drop)

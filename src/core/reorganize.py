@@ -48,26 +48,20 @@ class DatasetSplitter:
         self._ns = nSplits
         self._ne = nEach
         if nFractions is not None:
-            if isinstance(nFractions, str):
-                nFractions = nFractions.split(';')
             try:
                 nFractions = [float(f) for f in nFractions]
             except ValueError:
                 msg = "nFractions must be real number seperated by ';' or a list of real numbers"
                 raise RuntimeError(msg)
             if sum(nFractions) != 1.0:
-                msg = "nFractions must sum up to 1"
+                msg = f"nFractions must sum up to 1.0, got: {nFractions}"
                 raise RuntimeError(msg)
         self._nf = nFractions
-
-        if partNames is not None:
-            if isinstance(partNames, str):
-                partNames = partNames.split(';')
         self.partNames = partNames
 
     def run(self, root: str, outDir: str = None,
             imgDirName: str = None, lblDirName: str = None,
-            contiguous: bool = True, keep: bool = False):
+            contiguous: bool = True, drop: bool = False):
 
         # Check dataset type, must be VOC or KITTI
         DataKlass = Dataset.find_dataset(root)
@@ -135,7 +129,7 @@ class DatasetSplitter:
                     else:
                         dstImg = os.path.join(dstImgDir, img)
                         dstLbl = os.path.join(dstLblDir, lbl)
-                    if keep:
+                    if not drop:
                         futures.append(exe.submit(shutil.copy2, srcImg, dstImg))
                         futures.append(exe.submit(shutil.copy2, srcLbl, dstLbl))
                     else:
@@ -148,7 +142,7 @@ class DatasetSplitter:
                 if i % 2:
                     progress.update()
 
-        if not keep:
+        if drop:
             try:
                 os.remove(os.path.abspath(os.path.expanduser(root)))
             except PermissionError:
@@ -219,7 +213,7 @@ class DatasetCombiner:
             msg = "No input dataset to merge"
             raise RuntimeError(msg)
 
-    def run(self, outDir: str, contiguous: bool = True, keep: bool = False):
+    def run(self, outDir: str, contiguous: bool = True, drop: bool = False):
         outDir = check_path(outDir, False)
         outRoot = self.DsKlass.create_structure(*os.path.split(outDir))
         dstImgDir = os.path.join(outRoot, self.DsKlass.imgDirName)
@@ -259,7 +253,7 @@ class DatasetCombiner:
                     else:
                         dstImg = os.path.join(dstImgDir, f"{dsName}-{imgName}")
                         dstLbl = os.path.join(dstLblDir, f"{dsName}-{lblName}")
-                    if keep:
+                    if not drop:
                         futures.append(exe.submit(shutil.copy2, srcImg, dstImg))
                         futures.append(exe.submit(shutil.copy2, srcLbl, dstLbl))
                     else:
@@ -272,7 +266,7 @@ class DatasetCombiner:
                 if i % 2:
                     progress.update()
 
-        if not keep:
+        if drop:
             for inpDir in self.inputs:
                 try:
                     os.remove(os.path.abspath(os.path.expanduser(inpDir)))

@@ -127,7 +127,7 @@ class _OpenCV_Backend(_VisBackend):
         if winName is None: winName = "Image"
         self.winName = winName
         self.window = cv2.namedWindow(winName)
-        sys.stdout.write("OpenCV backend, press ANY key slide; press `q` to exit\n")
+        sys.stdout.write("OpenCV backend, press ANY key to slide; press `q` to exit\n")
 
     def visualize(self, image: np.ndarray):
         cv2.imshow(self.winName, image)

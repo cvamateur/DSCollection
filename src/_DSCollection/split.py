@@ -6,4 +6,4 @@ from ..core.reorganize import DatasetSplitter
 def main(args):
     s = DatasetSplitter(args.num_splits, args.num_per_each, args.num_fractions, args.names)
     for input_dir in args.input:
-        s.run(input_dir, args.output, contiguous=args.contiguous, keep=args.keep)
+        s.run(input_dir, args.output, contiguous=args.contiguous, keep=args.drop)
