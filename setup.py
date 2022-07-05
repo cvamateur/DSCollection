@@ -8,6 +8,7 @@ setup(
     name="dscollection",
     author="Chris LIU",
     author_email="chris.lq@hotmail.com",
+    url="https://github.com/cvamateur/DSCollection",
     version="1.0.0",  # 0.0.x is imply it unstable
     description="A collection of tools ease of dataset manipulation",
     scripts=["bin/dsc"],
