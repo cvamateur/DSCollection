@@ -4,7 +4,9 @@ _A collection of tools ease manipulations of datasets._
 
 ## Installation
 ```shell
-pip install dscollection
+python3 setup.py bdist_wheel
+pip3 install -e .
+# pip install dscollection
 ```
 
 ### Task description:
