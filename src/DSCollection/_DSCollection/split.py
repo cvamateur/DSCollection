@@ -1,5 +1,5 @@
-from ..utils.tasks import TaskDispatcher, TASK
-from ..core.reorganize import DatasetSplitter
+from DSCollection.utils.tasks import TaskDispatcher, TASK
+from DSCollection.core import DatasetSplitter
 
 
 @TaskDispatcher(TASK.SPLIT)

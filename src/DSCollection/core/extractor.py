@@ -5,7 +5,7 @@ from typing import List, Union
 
 from tqdm import tqdm
 
-from src.utils.common import check_path
+from DSCollection.utils import check_path
 from .dataset import Dataset
 from .convertor import Convertor, LabelInfo
 

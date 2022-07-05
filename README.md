@@ -2,6 +2,11 @@
 
 _A collection of tools ease manipulations of datasets._
 
+## Installation
+```shell
+pip install dscollection
+```
+
 ### Task description:
 
 #### 1. **extract**:

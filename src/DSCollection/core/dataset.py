@@ -12,8 +12,8 @@ from typing import List, Tuple, Dict, Any, Union, Type
 from tqdm import tqdm
 from pycocotools.coco import COCO as coco
 
-from src.utils.common import check_path, silent, is_image
-from src.utils.voc import xml_to_dict
+from ..utils.common import check_path, silent, is_image
+from ..utils.voc import xml_to_dict
 
 _T_coord = Union[int, float]
 

@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Type, Union
 
 from tqdm import tqdm
 
-from src.utils.voc import dict_to_xml, pretty_xml
+from DSCollection.utils import dict_to_xml, pretty_xml
 from .dataset import Dataset, DatasetType, ImageLabel
 
 
