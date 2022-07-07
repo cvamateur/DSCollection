@@ -6,13 +6,13 @@ with open("README.md", 'r') as f:
 setup(
     # name what to pip install, different from module name to import from code
     name="dscollection",
-    author="Chris LIU",
+    author="Chris LIU, Shiboy",
     author_email="chris.lq@hotmail.com",
     url="https://github.com/cvamateur/DSCollection",
-    version="1.0.0",  # 0.0.x is imply it unstable
-    description="A collection of tools ease of dataset manipulation",
+    version="1.0.0",  # 0.0.x imply is unstable
+    description="A collection of tools ease dataset manipulation",
     scripts=["bin/dsc"],
-    packages=find_packages("src"),  # a list of actual python modules
+    packages=find_packages("src"),  # a list of actual python packages
     package_dir={"": "src"},
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -28,6 +28,5 @@ setup(
         "pycocotools ~= 2.0.4",
         "pandas ~= 1.4.3",
         "numpy >= 1.17.0",
-        "matplotlib ~= 3.5.1",
-    ]
+        "matplotlib ~= 3.5.1"],
 )

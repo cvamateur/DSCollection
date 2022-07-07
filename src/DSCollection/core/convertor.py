@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Type, Union
 
 from tqdm import tqdm
 
+from ..utils.common import check_path
 from ..utils.voc import dict_to_xml, pretty_xml
 from .dataset import Dataset, DatasetType, ImageLabel
 
@@ -38,8 +39,7 @@ class LabelInfo:
         return dict(
             (slot, getattr(self, slot))
             for slot in self.__slots__
-            if hasattr(self, slot)
-        )
+            if hasattr(self, slot))
 
     def __setstate__(self, state):
         # BUG FIX: Unpickable frozen dataclasses
@@ -64,8 +64,20 @@ class Convertor(ABC):
             raise ValueError(msg)
         return cls._known_cvt[dtype]
 
+    @classmethod
+    def create_dataset(cls, root: str, name: str):
+        dstDir = check_path(root, True)
+        root = os.path.join(dstDir, name)
+        os.makedirs(os.path.join(root, cls.imgDirName), exist_ok=True)
+        os.makedirs(os.path.join(root, cls.lblDirName), exist_ok=True)
+        return root
+
     @abstractmethod
     def convert(self, ds: Dataset) -> List[LabelInfo]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def convert_label(self, index: int, label: ImageLabel) -> LabelInfo:
         raise NotImplementedError
 
     def __init_subclass__(cls, dtype: str = None, **kwargs):
@@ -90,7 +102,7 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
         futures = []
         with ProcessPoolExecutor(self.n_workers) as executor:
             for i, label in enumerate(ds.labels):
-                future = executor.submit(self.cvt_label, self._last_n + i, label)
+                future = executor.submit(self.convert_label, self._last_n + i, label)
                 futures.append(future)
 
             for future in tqdm(as_completed(futures), total=len(futures), desc="Convert dataset"):
@@ -126,10 +138,13 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
             d.setdefault("object", []).append(box_dict)
         return d
 
-    def cvt_label(self, index: int, label: ImageLabel) -> LabelInfo:
+    def cvt_label_bytes(self, label: ImageLabel) -> bytes:
         label_dict = self._label_dict(label)
         xml_node = dict_to_xml(label_dict)
-        xml_str = pretty_xml(xml_node).encode("utf-8")
+        return pretty_xml(xml_node).encode("utf-8")
+
+    def convert_label(self, index: int, label: ImageLabel) -> LabelInfo:
+        xml_str = self.cvt_label_bytes(label)
         return LabelInfo(index, xml_str, label.fileName)
 
 
@@ -138,8 +153,11 @@ class KITTIConvertor(VOCConvertor, dtype=DatasetType.KITTI):
     imgDirName = "images"
     lblDirName = "labels"
 
-    def cvt_label(self, index: int, label: ImageLabel) -> LabelInfo:
+    def convert_label(self, index: int, label: ImageLabel) -> LabelInfo:
+        kitti_str = self.cvt_label_bytes(label)
+        return LabelInfo(index, kitti_str, label.fileName)
+
+    def cvt_label_bytes(self, label: ImageLabel) -> bytes:
         label_fmt = "{} 0 0 0 {} {} {} {} 0 0 0 0 0 0 0"
         kitti_lines = [label_fmt.format(box.name, *box.coord) for box in label.boxes]
-        kitti_str = '\n'.join(kitti_lines).encode("utf-8")
-        return LabelInfo(index, kitti_str, label.fileName)
+        return '\n'.join(kitti_lines).encode("utf-8")

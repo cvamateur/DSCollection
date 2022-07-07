@@ -95,11 +95,11 @@ class _KwargsAction(argparse._StoreAction):
                     msg = f"{k} has no value"
                     raise RuntimeError(msg)
             kwargs[k] = v
-        super(_KwargsAction, self).__call__(parser, namespace, kwargs, option_string=None)
+        super(_KwargsAction, self).__call__(parser, namespace, kwargs, option_string)
 
 
 def get_cli_parser() -> ArgumentParser:
-    mainParser = ArgumentParser(add_help=False, epilog=TASK.__doc__)
+    mainParser = ArgumentParser(add_help=False, epilog=TASK.__doc__, formatter_class=argparse.RawTextHelpFormatter)
     mainParser.add_argument("-v", "--version", action="version", version=f"DSCollection {v}")
 
     # Parent parsers
@@ -111,6 +111,7 @@ def get_cli_parser() -> ArgumentParser:
 
     # Add generate task parser
     generateParser = tasks.add_parser(TASK.GENERATE, parents=[commParser, outTypeParser])
+    add_process_arguments(generateParser)
     add_generate_task_arguments(generateParser)
 
     # Add extract task parser
@@ -142,10 +143,7 @@ def build_common_arguments(parser: ArgumentParser = None):
 
 
 def add_process_arguments(parser: ArgumentParser):
-    parser.add_argument("--crop-size", type=int, default=1296, help="Center crop size (default: 1296).")
-    parser.add_argument("--roi-offset", type=int, default=0, help="Offset of roi cropping (default: 0).")
-    parser.add_argument("--camera-shifts", default="(0,0,0,0)", action=_EvalValueAction,
-                        help="Offsets of camera cropping (default (0,0,0,0)).")
+    parser.add_argument("--crop-size", type=int, help="Center crop size (default: 1296).")
     parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image")
     return parser
 
@@ -163,8 +161,15 @@ def build_output_dtypes_arguments(parser: ArgumentParser = None):
 
 def add_generate_task_arguments(parser: ArgumentParser):
     parser.add_argument("-s", "--show", action="store_true", help="Show pipeline.")
-    parser.add_argument("-m", "--model", action="append", default=[], help="Model config file.")
+    parser.add_argument("-m", "--model", dest="models", action="append", default=[], help="Model config file.")
+    parser.add_argument("-j", "--num-workers", type=int, help="Number workers.")
     parser.add_argument("--ext", default=".png", help="Image file extension.")
+    parser.add_argument("--gpu-id", type=int, metavar="GPU_ID")
+    parser.add_argument("--max-srcs", type=int, help="Maximum number of sources (default: 2).")
+    parser.add_argument("--skip-mode", type=int, help="Frame skipping mode. [0:all(default), 1:non_ref[Jetson], 2:key]")
+    parser.add_argument("--interval", type=int, help="Frame interval to decode (default: 0).")
+    parser.add_argument("--camera-shifts", action=_EvalValueAction, help="Offsets of camera cropping (default (0,0,0,0)).")
+    parser.add_argument("--memory-type", type=int, default=3, help="NvBuf memory type.")
 
 
 def add_extract_task_arguments(parser: ArgumentParser):

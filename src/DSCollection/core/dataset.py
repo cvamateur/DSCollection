@@ -59,7 +59,7 @@ class ImageLabel:
 
 class DatasetType:
     """
-    DsCollection legacy output one the three types dataset formats:
+    DsCollection legacy output one of the three types dataset formats:
         1. VOC:
             Images are saved in subdir `JPEGImages`;
             Labels are saved as xml files under subdir `Annotations`;

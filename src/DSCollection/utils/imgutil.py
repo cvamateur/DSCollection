@@ -16,8 +16,9 @@ class ImageUtil:
 
     @classmethod
     def encode(cls, img: np.ndarray, ext: str = ".png") -> Union[bytes, None]:
-        imgRaw = cv2.imencode(ext, img)
-        return imgRaw
+        imgRaw = cv2.imencode(ext, img)[1]
+        imgData = np.array(imgRaw).tobytes()
+        return imgData
 
     @classmethod
     def decode_many(cls, imgList: Iterable[bytes], num_workers: int = 1) -> List[np.ndarray]:

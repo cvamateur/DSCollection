@@ -50,7 +50,7 @@ class DataExtractor:
         if dsName is None:
             dstDir, dsName = os.path.split(dstDir)
             dstDir = check_path(dstDir)
-        dstRoot = self.create_dataset(dstDir, dsName, self.cvt.imgDirName, self.cvt.lblDirName)
+        dstRoot = self.cvt.create_dataset(dstDir, dsName)
         ds.load(clsNames, nImgs)
         cvt_results = self.cvt.convert(ds)
         srcImgDir = os.path.join(ds.root, ds.imgDirName)
@@ -82,10 +82,4 @@ class DataExtractor:
         with open(dstLbl, 'wb') as f:
             f.write(lblBytes)
 
-    @staticmethod
-    def create_dataset(root: str, name: str, imgDir: str, lblDir: str):
-        dstDir = check_path(root, True)
-        root = os.path.join(dstDir, name)
-        os.makedirs(os.path.join(root, imgDir), exist_ok=True)
-        os.makedirs(os.path.join(root, lblDir), exist_ok=True)
-        return root
+

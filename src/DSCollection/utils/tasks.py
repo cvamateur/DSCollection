@@ -3,10 +3,8 @@ from typing import Callable, List
 
 class TASK:
     """
-    Task description:
-
     1. extract:
-        Extract some of all classes from original datasets, save as VOC | KITTI.
+        Extract some or all classes from original datasets, save as VOC | KITTI.
 
     2. generate:
         Generate new dataset from raw fisheye videos, automated labeling by given model
@@ -22,17 +20,20 @@ class TASK:
     5. split:
         Split a dataset into multiple partitions, only images and labels are moved to
         partitions.
-    """
 
+    6. process:
+
+    """
     EXTRACT = "extract"
     GENERATE = "generate"
     VISUALIZE = "visualize"
     COMBINE = "combine"
     SPLIT = "split"
+    PROCESS = "process"
 
     @classmethod
     def list_all(cls) -> List[str]:
-        return [cls.EXTRACT, cls.GENERATE, cls.VISUALIZE, cls.COMBINE, cls.SPLIT]
+        return [cls.EXTRACT, cls.GENERATE, cls.VISUALIZE, cls.COMBINE, cls.SPLIT, cls.PROCESS]
 
 
 class TaskDispatcher:
