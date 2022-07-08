@@ -12,7 +12,7 @@ import numpy as np
 from enum import IntEnum
 from threading import Thread
 from multiprocessing import Process, Queue
-from queue import Queue as threadQueue
+from queue import Queue as threadQueue, Empty
 from typing import List, Dict, Callable, Tuple
 
 gi.require_version("Gst", "1.0")
@@ -27,16 +27,13 @@ from .gst import build_uri_source, build_preprocess
 
 g_count: int = 0                    # The number of consecutive frames that have been processed
 g_num_srcs: int = 0                 # Number of sources already in pipeline
-g_contiguous: bool                  # Flag indicate whether save images sequentially
+g_sync_num: int = 150               # Threshold trigger synchronizing buffer
 g_uri_list: List[str]               # Static array containing current URIs
 g_enabled_list: List[bool]          # Static array containing flags that indicate corresponding sources are enabled
 g_eos_list: List[bool]              # Static array containing flags that indicate corresponding sources reached eos
 g_src_list: List[Gst.Element]       # Static array containing current source elements
 g_prc_list: List[Gst.Element]       # Static array containing current preprocess elements
 g_cls_dict: Dict[int, List[str]]    # Map model unique-id to class names
-g_fname_nfmt: str                   # File name string format
-
-g_sync_num: int = 1000
 
 
 class InputType(IntEnum):
@@ -72,27 +69,20 @@ class _GeneratorDaemon(Process):
 
         # Start two threads
         for i in range(self._num_workers):
-            worker = _GeneratorWorker(self._buffer)
+            worker = _GeneratorDaemonWorker(self._buffer)
             worker.start()
             self._worker.append(worker)
 
         while True:
-            try:
-                data = self.queue.get(timeout=3)
-                print("Get data -> ", self.name)
-            except Exception:
-                print("Get data timeout -> ", self.name)
-                time.sleep(0.5)
-                continue
+            data = self.queue.get()
             if data is None:
-                print("Get empty data -> ", self.name)
                 for i in range(self._num_workers):
                     self._buffer.put(None)
                 break
             frame, lblInfo, dstImg, dstLbl = data
-            self._buffer.put((lblInfo.data, dstLbl))
+            if dstLbl:
+                self._buffer.put((lblInfo.data, dstLbl))
             imgExt = os.path.splitext(dstImg)[1]
-            frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
             frameBytes = ImageUtil.encode(frame, imgExt)
             self._buffer.put((frameBytes, dstImg))
 
@@ -100,23 +90,17 @@ class _GeneratorDaemon(Process):
             worker.join()
 
 
-class _GeneratorWorker(Thread):
+class _GeneratorDaemonWorker(Thread):
 
     def __init__(self, queue: threadQueue):
-        super(_GeneratorWorker, self).__init__()
+        super(_GeneratorDaemonWorker, self).__init__()
         self._q = queue
         self.daemon = True
 
     def run(self) -> None:
         while True:
-            try:
-                content = self._q.get(timeout=3)
-            except Exception:
-                print("Get data timeout -> ", self.name)
-                time.sleep(0.5)
-                continue
+            content = self._q.get()
             if content is None:
-                print("Get empty data -> ", self.name)
                 break
             data, path = content
             with open(path, 'wb') as f:
@@ -133,6 +117,7 @@ class Generator:
     def __init__(self, inputs: List[str], outDir: str,
                  models: List[str] = None,
                  dType: str = DatasetType.KITTI,
+                 subdir: str = "",
                  imgExt: str = ".png",
                  max_srcs: int = None,
                  skip_mode: int = None,
@@ -142,7 +127,9 @@ class Generator:
                  crop_size: int = None,
                  memory_type: int = None,
                  num_workers: int = None,
-                 contiguous: bool = False):
+                 contiguous: bool = False,
+                 drop_empty: bool = False,
+                 save_empty_label: bool = False):
 
         global g_enabled_list
         global g_eos_list
@@ -150,19 +137,18 @@ class Generator:
         global g_src_list
         global g_prc_list
         global g_cls_dict
-        global g_contiguous
-        global g_fname_nfmt
 
         self.input_type, self.input_uris = self.check_inputs(inputs)
         try:
-            self.cvt = Convertor.from_type(dType)()
+            cvt = Convertor.from_type(dType)()
         except ValueError:
             msg = "error: unsupported dtype"
             raise RuntimeError(msg)
-        self.outDir, self.imgDir, self.lblDir = self.check_output(outDir, self.cvt)
+        self.outDir, self.imgDir, self.lblDir = self.check_output(outDir, subdir, cvt)
         self.models = self.check_models(models)
         self.imgExt = imgExt if is_image(imgExt) else ".jpg"
-        self.lblExt = self.cvt.lblExt
+        self.lblExt = cvt.lblExt
+        self.convert_label = cvt.convert_label
         self.max_srcs = 1 if not max_srcs else max(1, int(max_srcs))
         if self.max_srcs == 1 and len(self.input_uris) > 1:
             self.max_srcs = min(4, len(self.input_uris))
@@ -176,11 +162,15 @@ class Generator:
         g_src_list = [None] * self.max_srcs
         g_prc_list = [None] * self.max_srcs
         g_cls_dict = {}
-        g_contiguous = contiguous
+        self.contiguous = contiguous
+        self.drop_empty = drop_empty
+        self.save_empty_label = save_empty_label
         if contiguous:
-            g_fname_nfmt = "{n:08d}{ext}"
+            self.imgPathFMT = os.path.join(self.imgDir, "{count:08d}" + self.imgExt)
+            self.lblPathFMT = os.path.join(self.lblDir, "{count:08d}" + self.lblExt)
         else:
-            g_fname_nfmt = "{uri}-{fIdx}-{cIdx}{ext}"
+            self.imgPathFMT = os.path.join(self.imgDir, "{name}-{fIdx}-{cIdx}" + self.imgExt)
+            self.lblPathFMT = os.path.join(self.lblDir, "{name}-{fIdx}-{cIdx}" + self.lblExt)
 
         # Initialization of Gstreamer
         Gst.init(None)
@@ -189,6 +179,7 @@ class Generator:
         self.loop: GLib.MainLoop
         self.streammux: Gst.Element
         self.probe_func: Callable
+        self.state: Gst.State = None
         self.skip_mode = 0 if not skip_mode else max(0, min(2, int(skip_mode)))
         self.interval = 0 if not interval else max(0, int(interval))
         self.gpu_id = 0 if not gpu_id else max(0, int(gpu_id))
@@ -206,9 +197,9 @@ class Generator:
             self.workers.append(worker)
 
         # Print info
-        sys.stdout.write(f"[INFO]: Generator initialization complete\n")
-        sys.stdout.write(f"[INFO]: Number of inputs: {len(self.input_uris)}\n")
-        sys.stdout.write(f"[INFO]: Output path: {self.outDir}\n")
+        sys.stdout.write(f"INFO: Generator initialization complete\n")
+        sys.stdout.write(f"INFO: Number of inputs: {len(self.input_uris)}\n")
+        sys.stdout.write(f"INFO: Output path: {self.outDir}\n")
 
     def check_inputs(self, inputs: List[str]):
         """
@@ -268,7 +259,7 @@ class Generator:
         return InputType.UNKNOWN, []
 
     @staticmethod
-    def check_output(output_dir: str, cvt: Convertor):
+    def check_output(output_dir: str, subdir: str, cvt: Convertor):
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
         if os.path.exists(output_dir):
             msg = f"error: Output dataset already exist: {output_dir}"
@@ -277,6 +268,9 @@ class Generator:
         if not os.path.exists(dsRoot):
             msg = f"error: Output directory not exist {dsRoot}"
             raise RuntimeError(msg)
+        if subdir:
+            cvt.imgDirName = os.path.join(subdir, cvt.imgDirName)
+            cvt.lblDirName = os.path.join(subdir, cvt.lblDirName)
         dsRoot = cvt.create_dataset(dsRoot, dsName)
         imgDir = os.path.join(dsRoot, cvt.imgDirName)
         lblDir = os.path.join(dsRoot, cvt.lblDirName)
@@ -340,7 +334,6 @@ class Generator:
         except Exception:
             pass
         self.pipeline.set_state(Gst.State.NULL)
-        self.synchronize()
 
     def add_video_sources(self):
         global g_num_srcs
@@ -349,7 +342,6 @@ class Generator:
         global g_uri_list
         global g_src_list
         global g_prc_list
-        global g_ann_list
 
         for i in range(self.max_srcs):
             if g_enabled_list[i]:
@@ -431,7 +423,6 @@ class Generator:
             g_uri_list[i] = ""
             g_src_list[i] = None
             g_prc_list[i] = None
-            g_ann_list[i] = None
 
     def build_video_pipeline(self, show_pipe: bool = False):
         global g_cls_dict
@@ -450,9 +441,9 @@ class Generator:
         streammux.set_property("height", self.crop_size)
         streammux.set_property("batched-push-timeout", 2500)
         streammux.set_property("batch-size", 2 * self.max_srcs)
-        streammux.set_property("sync-inputs", False)
         streammux.set_property("gpu_id", self.gpu_id)
         streammux.set_property("nvbuf-memory-type", self.mem_type)
+        streammux.set_property("sync-inputs", False)
         pipeline.add(streammux)
 
         last = streammux
@@ -474,10 +465,10 @@ class Generator:
             # Read class-names from label.txt file
             modelDir = os.path.dirname(model)
             try:
-                labelTxt = os.path.join(modelDir, "label.txt")
+                labelTxt = os.path.join(modelDir, "labels.txt")
                 check_path(labelTxt)
             except FileNotFoundError:
-                msg = f"error: No label.txt file found under model path: {modelDir}"
+                msg = f"error: No `label.txt` file found under model path: {modelDir}"
                 raise RuntimeError(msg)
 
             with open(labelTxt, 'r') as f:
@@ -532,35 +523,69 @@ class Generator:
         srcpad.add_probe(Gst.PadProbeType.BUFFER, self.probe_func, self)
 
     def synchronize(self):
-        print("Synchronize - ", self.buffer.qsize())
-        while True:
-            if self.buffer.qsize() <= g_sync_num:
+
+        while self.state == Gst.State.PLAYING and self.buffer.qsize() > g_sync_num:
+            ret = self.pipeline.set_state(Gst.State.PAUSED)
+            if ret == Gst.StateChangeReturn.FAILURE:
+                sys.stderr.write("[WARN]: Failed to pause pipeline, sync stopped\n")
                 break
-            print("Qsize:", self.buffer.qsize())
-            time.sleep(0.5)
+            if ret == Gst.StateChangeReturn.ASYNC:
+                ret = self.pipeline.get_state(10)
+                if ret == Gst.StateChangeReturn.FAILURE:
+                    sys.stderr.write("[WARN]: Failed to pause pipeline, sync stopped\n")
+                    break
+
+            total = self.buffer.qsize()
+            progress = tqdm(total=total, desc="Sync buffer")
+            while total > 0:
+                time.sleep(1.0)
+                current_size = self.buffer.qsize()
+                if current_size > total:
+                    progress.total = total = current_size
+                else:
+                    progress.update(total - current_size)
+                    total = current_size
+            progress.update(progress.total - progress.n)
+            progress.close()
+            self.pipeline.set_state(Gst.State.PLAYING)
 
     def wait_until_finish(self):
-        sys.stderr.write("[INFO]: Wait until finish...\n")
         for _ in range(self.num_workers):
             self.buffer.put(None)
+        total = self.buffer.qsize()
+        if total <= 0: return
+        progress = tqdm(total=total, desc="Wait until finish")
+        while total > 0:
+            time.sleep(1.0)
+            current_size = self.buffer.qsize()
+            if current_size > total:
+                progress.total = total = current_size
+            else:
+                progress.update(total - current_size)
+                total = current_size
+        progress.update(progress.total - progress.n)
+        progress.close()
         for worker in self.workers:
             worker.join()
 
     def probe_func(self, pad: Gst.Pad, info: Gst.PadProbeInfo, user_data) -> Gst.PadProbeReturn:
         global g_count
-        global g_contiguous
         global g_cls_dict
-        global g_fname_nfmt
 
-        imgExt = self.imgExt
-        lblExt = self.lblExt
+        contiguous = self.contiguous
+        drop_empty = self.drop_empty
+        save_empty_label = self.save_empty_label
+        imgPathFMT = self.imgPathFMT
+        lblPathFMT = self.lblPathFMT
+        buffer = self.buffer
+        convert_label = self.convert_label
 
-        buffer = info.get_buffer()
-        if not buffer:
+        gst_buffer = info.get_buffer()
+        if not gst_buffer:
             sys.stderr.write("warn: unable to get buffer\n")
             return Gst.PadProbeReturn.OK
 
-        batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(buffer))
+        batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
         l_frame = batch_meta.frame_meta_list
         while l_frame is not None:
             try:
@@ -575,7 +600,7 @@ class Generator:
             width = frame_meta.source_frame_width
             height = frame_meta.source_frame_height
 
-            # Traverse objects detected by this gie
+            # Traverse objects detected by gie
             boxes = []
             l_obj = frame_meta.obj_meta_list
             while l_obj is not None:
@@ -597,30 +622,32 @@ class Generator:
                 except StopIteration:
                     break
 
-            if boxes:
-                frame = pyds.get_nvds_buf_surface(hash(buffer), batch_idx)
+            if boxes or not drop_empty:
+                frame = pyds.get_nvds_buf_surface(hash(gst_buffer), batch_idx)
                 frame = np.array(frame, copy=True, order='C')
-                if g_contiguous:
-                    imgName = g_fname_nfmt.format(n=g_count, ext=imgExt)
-                    lblName = g_fname_nfmt.format(n=g_count, ext=lblExt)
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
+                if contiguous:
+                    imgPath = imgPathFMT.format(count=g_count)
+                    lblPath = lblPathFMT.format(count=g_count)
                 else:
                     uri_name = os.path.basename(g_uri_list[source_idx]).split('.')[0]
-                    imgName = g_fname_nfmt.format(uri=uri_name, fIdx=frame_idx, cIdx=stream_idx, ext=imgExt)
-                    lblName = g_fname_nfmt.format(uri=uri_name, fIdx=frame_idx, cIdx=stream_idx, ext=lblExt)
+                    imgPath = imgPathFMT.format(name=uri_name, fIdx=frame_idx, cIdx=stream_idx % 2)
+                    lblPath = lblPathFMT.format(name=uri_name, fIdx=frame_idx, cIdx=stream_idx % 2)
+                if not boxes and not save_empty_label:
+                    lblPath = ""
 
-                dstImgPath = os.path.join(self.imgDir, imgName)
-                dstLblPath = os.path.join(self.lblDir, lblName)
-
+                imgName = os.path.basename(imgPath)
                 imgLbl = ImageLabel(imgName, boxes, width, height)
-                lblInfo = self.cvt.convert_label(g_count, imgLbl)
-                self.buffer.put((frame, lblInfo, dstImgPath, dstLblPath))
+                lblInfo = convert_label(g_count, imgLbl)
+                buffer.put((frame, lblInfo, imgPath, lblPath))
                 g_count += 1
+
             try:
                 l_frame = l_frame.next
             except StopIteration:
                 break
 
-            return Gst.PadProbeReturn.OK
+        return Gst.PadProbeReturn.OK
 
 
 def bus_call(bus, message, gen: Generator):
@@ -629,12 +656,8 @@ def bus_call(bus, message, gen: Generator):
     t = message.type
     if t == Gst.MessageType.EOS:
         sys.stdout.write("End-of-stream\n")
-        if not len(gen.input_uris):
-            gen.loop.quit()
-        else:
-            sys.stdout.write("Restart pipeline\n")
-            gen.pipeline.set_state(Gst.State.NULL)
-            gen.pipeline.set_state(Gst.State.PLAYING)
+        gen.pipeline.set_state(Gst.State.NULL)
+        gen.loop.quit()
 
     elif t == Gst.MessageType.WARNING:
         err, debug = message.parse_warning()
@@ -651,18 +674,16 @@ def bus_call(bus, message, gen: Generator):
             parsed, stream_id = struct.get_uint("stream-id")
             if parsed:
                 src_id = stream_id // 2
-                sys.stdout.write("Got EOS from stream(%d)\n" % stream_id)
                 g_eos_list[src_id] = True
+                if stream_id % 2:
+                    sys.stdout.write("Got EOS from source(%d)\n" % src_id)
 
     elif t == Gst.MessageType.STATE_CHANGED:
         old_state, new_state, _ = message.parse_state_changed()
         if message.src == gen.pipeline:
-            old_state_name = Gst.Element.state_get_name(old_state)
-            new_state_name = Gst.Element.state_get_name(new_state)
-            print(f"State changed {old_state_name} -> {new_state_name}")
+            gen.state = new_state
             if new_state == Gst.State.PLAYING:
                 gen.save_dot()
-
     return True
 
 

@@ -118,7 +118,7 @@ def build_preprocess(index: int,
     tee = Gst.ElementFactory.make("tee")
 
     # Left camera
-    queue0 = Gst.ElementFactory.make("queue")
+    # queue0 = Gst.ElementFactory.make("queue")
     conv0 = Gst.ElementFactory.make("nvvideoconvert")
     filt0 = Gst.ElementFactory.make("capsfilter")
     conv0.set_property("gpu-id", gpu_id)
@@ -129,7 +129,7 @@ def build_preprocess(index: int,
     filt0.set_property("caps", Gst.Caps.from_string(caps_str))
 
     # Right camera
-    queue1 = Gst.ElementFactory.make("queue")
+    # queue1 = Gst.ElementFactory.make("queue")
     conv1 = Gst.ElementFactory.make("nvvideoconvert")
     filt1 = Gst.ElementFactory.make("capsfilter")
     conv1.set_property("gpu-id", gpu_id)
@@ -140,22 +140,22 @@ def build_preprocess(index: int,
     filt1.set_property("caps", Gst.Caps.from_string(caps_str))
 
     nBin.add(tee)
-    nBin.add(queue0)
+    # nBin.add(queue0)
     nBin.add(conv0)
     nBin.add(filt0)
-    nBin.add(queue1)
+    # nBin.add(queue1)
     nBin.add(conv1)
     nBin.add(filt1)
 
     srcpad0 = tee.get_request_pad("src_%u")
     srcpad1 = tee.get_request_pad("src_%u")
-    sinkpad0 = queue0.get_static_pad("sink")
-    sinkpad1 = queue1.get_static_pad("sink")
+    sinkpad0 = conv0.get_static_pad("sink")
+    sinkpad1 = conv1.get_static_pad("sink")
     srcpad0.link(sinkpad0)
     srcpad1.link(sinkpad1)
-    queue0.link(conv0)
+    # queue0.link(conv0)
     conv0.link(filt0)
-    queue1.link(conv1)
+    # queue1.link(conv1)
     conv1.link(filt1)
 
     sinkpad = tee.get_static_pad("sink")

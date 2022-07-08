@@ -22,10 +22,11 @@ def check_dependencies():
 def main(args):
     check_dependencies()
 
-    g = Generator(args.input, args.output, args.models, args.dtype, args.ext,
+    g = Generator(args.input, args.output, args.models, args.dtype, args.subdir, args.ext,
                   args.max_srcs, args.skip_mode, args.interval, args.gpu_id,
                   args.camera_shifts, args.crop_size, args.memory_type,
-                  args.num_workers, args.contiguous)
+                  args.num_workers, args.contiguous, args.drop_empty,
+                  args.save_empty_label)
 
     if g.input_type == InputType.VIDEO:
         g.build_video_pipeline(args.show)

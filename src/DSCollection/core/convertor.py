@@ -64,12 +64,11 @@ class Convertor(ABC):
             raise ValueError(msg)
         return cls._known_cvt[dtype]
 
-    @classmethod
-    def create_dataset(cls, root: str, name: str):
+    def create_dataset(self, root: str, name: str):
         dstDir = check_path(root, True)
         root = os.path.join(dstDir, name)
-        os.makedirs(os.path.join(root, cls.imgDirName), exist_ok=True)
-        os.makedirs(os.path.join(root, cls.lblDirName), exist_ok=True)
+        os.makedirs(os.path.join(root, self.imgDirName), exist_ok=True)
+        os.makedirs(os.path.join(root, self.lblDirName), exist_ok=True)
         return root
 
     @abstractmethod

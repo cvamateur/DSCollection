@@ -132,7 +132,14 @@ class Dataset(ABC):
         return root
 
     @classmethod
-    def check_is_correct_path(cls, root: str) -> bool:
+    def find_dataset(cls, root: str) -> Union[Type["Dataset"], None]:
+        check_path(root, existence=True)
+        for klass in cls._known_ds.values():
+            if klass.check_is_correct_path(root):
+                return klass
+        return None
+
+    def check_is_correct_path(self, root: str) -> bool:
         """
         Implement this method to tell whether the input root directory
         is this dataset, which can then allows others to instantiate
@@ -140,20 +147,12 @@ class Dataset(ABC):
         """
         try:
             check_path(root, existence=True)
-            check_path(os.path.join(root, cls.imgDirName), existence=True)
-            check_path(os.path.join(root, cls.lblDirName), existence=True)
+            check_path(os.path.join(root, self.imgDirName), existence=True)
+            check_path(os.path.join(root, self.lblDirName), existence=True)
         except FileNotFoundError:
             return False
         else:
             return True
-
-    @classmethod
-    def find_dataset(cls, root: str) -> Union[Type["Dataset"], None]:
-        check_path(root, existence=True)
-        for klass in cls._known_ds.values():
-            if klass.check_is_correct_path(root):
-                return klass
-        return None
 
     @classmethod
     def get_known_datasets(cls):
@@ -264,10 +263,10 @@ class KITTI(VOC, dtype=DatasetType.KITTI):
     lblDirName = "labels"
     lblExt = ".txt"
 
-    def __init__(self, root: str, *_, imgDir: str = "images", lblDir: str = "labels", **__):
+    def __init__(self, root: str, *_, imgDir: str = "images", lblDir: str = "labels", subdir: str = "", **__):
         super(KITTI, self).__init__(root, *_, **__)
-        self.imgDirName = imgDir
-        self.lblDirName = lblDir
+        self.imgDirName = os.path.join(subdir, imgDir)
+        self.lblDirName = os.path.join(subdir, lblDir)
 
     @staticmethod
     def load_label(imgName: str, lblFile: str, clsNames: List[str]) -> Union[ImageLabel, None]:
@@ -305,7 +304,7 @@ class COCO(Dataset, dtype=DatasetType.COCO):
         super(COCO, self).__init__(root, *_, **__)
         assert split in self.SPLITS, f"split must be one of {self.SPLITS}"
         assert year in self.YEARS, f"year must be one of {self.YEARS}"
-        self.imgDirName.format(split=split, year=year)
+        self.imgDirName = self.imgDirName.format(split=split, year=year)
 
     def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
 

@@ -498,6 +498,7 @@ def build_pipeline(args):
         tile.set_property("gpu-id", args.gpu_id)
         tile.set_property("nvbuf-memory-type", args.mem_type)
         sink.set_property("sync", False)
+        sink.set_property("qos", False)
 
         pipeline.add(tile)
         pipeline.add(conv)
@@ -512,6 +513,8 @@ def build_pipeline(args):
         if not sink:
             sys.stderr.write("error: unable to create fakesink\n")
             sys.exit(-1)
+        sink.set_property("sync", False)
+        sink.set_property("qos", False)
 
         pipeline.add(sink)
         last.link(sink)
