@@ -22,7 +22,7 @@ class TASK:
         partitions.
 
     6. process:
-
+        Pre-process a dataset as required.
     """
     EXTRACT = "extract"
     GENERATE = "generate"
