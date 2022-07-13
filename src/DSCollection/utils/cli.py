@@ -1,6 +1,7 @@
 import argparse
 import sys
 import ast
+from functools import partial
 
 from .tasks import TASK
 from ..core.dataset import DatasetType
@@ -26,6 +27,7 @@ class _EarlyStopAction(argparse.Action):
     Custom action that if option presents, just prints stop-info
     and exit the program.
     """
+
     def __init__(self, option_strings,
                  stop=None,
                  dest=argparse.SUPPRESS,
@@ -47,6 +49,7 @@ class _OptSeqAction(argparse._StoreAction):
     Custom action that split value by OPT_SEP and set new value as python list
     to namespace.
     """
+
     def __init__(self, option_strings, dest, sep=OPTSEP, **kwargs):
         self.sep = sep
         super(_OptSeqAction, self).__init__(option_strings, dest, **kwargs)
@@ -56,10 +59,14 @@ class _OptSeqAction(argparse._StoreAction):
         super(_OptSeqAction, self).__call__(parser, namespace, value, option_string)
 
 
+_XSepAction: _OptSeqAction = partial(_OptSeqAction, sep="x")
+
+
 class _EvalValueAction(argparse._StoreAction):
     """
     Custom action that call ast.literal_eval() on value and stores.
     """
+
     def __call__(self, parser, namespace, value, option_string=None):
         try:
             ast.literal_eval(value)
@@ -72,6 +79,7 @@ class _KwargsAction(argparse._StoreAction):
     """
     Custom action that store remaining arguments as kwargs.
     """
+
     def __call__(self, parser, namespace, value, option_string=None):
         kwargs = {}
         it = iter(value)
@@ -122,12 +130,18 @@ def get_cli_parser() -> ArgumentParser:
     add_visualize_task_arguments(visualizeParser)
 
     # Add split task parser
-    splitParser = tasks.add_parser(TASK.SPLIT,  parents=[commParser])
+    splitParser = tasks.add_parser(TASK.SPLIT, parents=[commParser])
     add_split_task_argument(splitParser)
 
     # Add combine task parser
-    combineParser = tasks.add_parser(TASK.COMBINE,  parents=[commParser])
+    combineParser = tasks.add_parser(TASK.COMBINE, parents=[commParser])
     add_combine_task_argument(combineParser)
+
+    # Add process task parser
+    processParser = tasks.add_parser(TASK.PROCESS, parents=[commParser, outTypeParser])
+    add_process_task_arguments(processParser)
+
+    # augmentationParser = processParser.add_subparsers(title="Augmentation", dest="sub_task")
 
     return mainParser
 
@@ -136,17 +150,8 @@ def build_common_arguments(parser: ArgumentParser = None):
     if parser is None:
         parser = ArgumentParser(add_help=False)
     parser.add_argument("-i", "--input", nargs="+", required=True, help="Input video or directory.")
-    parser.add_argument("-o", "--output", required="visualize" not in sys.argv,  help="Output directory.")
+    parser.add_argument("-o", "--output", required="visualize" not in sys.argv, help="Output directory.")
     parser.add_argument("-c", "--contiguous", action="store_true", help="Rename files sequentially.")
-    return parser
-
-
-def add_process_arguments(parser: ArgumentParser):
-    parser.add_argument("--crop-size", type=int, default=1296, help="Center crop size (default: 1296).")
-    parser.add_argument("--roi-offset", type=int, default=0, help="Offset of roi cropping (default: 0).")
-    parser.add_argument("--camera-shifts", default="(0,0,0,0)", action=_EvalValueAction,
-                        help="Offsets of camera cropping (default (0,0,0,0)).")
-    parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image")
     return parser
 
 
@@ -155,7 +160,8 @@ def build_output_dtypes_arguments(parser: ArgumentParser = None):
         parser = ArgumentParser(add_help=False)
     gp = parser.add_mutually_exclusive_group()
     gp.add_argument('--voc', dest="dtype", action="store_const", const=DatasetType.VOC, help="Save as VOC.")
-    gp.add_argument('--kitti', dest="dtype", action="store_const", const=DatasetType.KITTI, help="Save as KITTI (default).")
+    gp.add_argument('--kitti', dest="dtype", action="store_const", const=DatasetType.KITTI,
+                    help="Save as KITTI (default).")
     gp.add_argument('--coco', dest="dtype", action="store_const", const=DatasetType.COCO, help="Save as COCO.")
     parser.set_defaults(dtype=DatasetType.KITTI)
     return parser
@@ -209,3 +215,22 @@ def add_split_task_argument(parser: ArgumentParser):
 def add_combine_task_argument(parser: ArgumentParser):
     parser.add_argument("--drop", action="store_true", help="Keep original dataset.")
 
+
+def add_process_task_arguments(parser: ArgumentParser):
+    parser.add_argument("-n", "--name", type=str, default="Merged", help="Named of created datset directory.")
+    parser.add_argument("--output-size", action=_XSepAction, default="416x736",
+                        help=f"Size of the final image (HxW; separated by 'x'.")
+    parser.add_argument("-s", "--show", action="store_true", help="Whether show the annotated image.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Report dropped images.")
+    parser.add_argument("--crop-size", type=int, default=1296, help="Center crop size (default: 1296).")
+    parser.add_argument("--roi-offset", type=int, default=0, help="Offset of roi cropping (default: 0).")
+    parser.add_argument("--min-area", type=int, default=25 * 25, help="Minimum area that object will be ignored.")
+    parser.add_argument("--min-ratio", type=float, default=0.36, help="Minimum w/h ratio that object will be ignored.")
+    parser.add_argument("--max-ratio", type=float, default=2.0, help="Maximum w/h ratio that object will be ignored.")
+    parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image.")
+    parser.add_argument("--aspect-ratio", action="store_true", help="Maintain aspect ratio.")
+    return parser
+
+
+def add_augmentation_task_arguments(parser: ArgumentParser):
+    ...
