@@ -9,6 +9,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, Future, ProcessPoolExecutor
 from os.path import join as path_join
 from typing import List, Callable, Tuple, Dict
+import shutil
 
 import cv2
 import numpy as np
@@ -28,14 +29,19 @@ MAX_WORKER = 5
 
 class Process:
 
-    def __init__(self, inputs: List[str], dst_dtype: str, output: str = None, name: str = "Merged"):
+    def __init__(self, inputs: List[str], dst_dtype: str, output: str = None, name: str = "Merged",
+                 force: bool = False):
         if output:
             self.output = path_join(output, name)
-            assert not os.path.exists(self.output), "Output dataset already exist."
+            if os.path.exists(self.output):
+                if force:
+                    shutil.rmtree(self.output)
+                else:
+                    raise FileExistsError("Output dataset already exist.")
 
             self.output_dst = Dataset.from_type(dst_dtype)(output)
             self.output_dst.create_structure(output, name)
-            self.convertor = Convertor.from_type(dst_dtype)()
+            self.convertor = Convertor.from_type(dst_dtype)
         else:
             self.output_dst = None
 
@@ -90,7 +96,7 @@ class Process:
     def load(self) -> Tuple[Dict[ImageLabel, np.ndarray]]:
         for dataset in self.datasets:
             self.current_dataset_index += 1
-            dataset.load()
+            dataset.load(skip_empty=False)
             iter_labels = self._chunkify(CHUNK_SIZE, dataset.labels)
             labels = next(iter_labels)
             pre_data = self.read_image(labels, dataset.root, dataset.imgDirName)
@@ -266,11 +272,11 @@ class Process:
         return boxes, skipped_boxes
 
     @staticmethod
-    def _save(cvt, img_path: str, lbl_path: str, img: np.ndarray, label: ImageLabel, ow: int, oh: int):
+    def _save(cvt: Convertor, img_path: str, lbl_path: str, img: np.ndarray, label: ImageLabel, ow: int, oh: int):
 
-        label_info = cvt.cvt_label(1, label)
+        label_info = cvt.convert_label(1, label)
         img = cv2.resize(img, (ow, oh), interpolation=cv2.INTER_CUBIC)
-        bimg = ImageUtil.encode(img)[1]
+        bimg = ImageUtil.encode(img)
         with open(img_path, 'wb') as f:
             f.write(bimg)
         with open(lbl_path, 'wb') as f:

@@ -185,7 +185,8 @@ def add_generate_task_arguments(parser: ArgumentParser):
     parser.add_argument("--max-srcs", type=int, help="Maximum number of sources (default: 1).")
     parser.add_argument("--skip-mode", type=int, help="Frame skipping mode. [0:all(default), 1:non_ref[Jetson], 2:key]")
     parser.add_argument("--interval", type=int, help="Frame interval to decode (default: 0).")
-    parser.add_argument("--camera-shifts", action=_EvalValueAction, help="Offsets of camera cropping (default (0,0,0,0)).")
+    parser.add_argument("--camera-shifts", action=_EvalValueAction,
+                        help="Offsets of camera cropping (default (0,0,0,0)).")
     parser.add_argument("--memory-type", type=int, default=3, help="NvBuf memory type.")
     parser.add_argument("--gpu-id", type=int, metavar="GPU_ID")
     parser.add_argument("--subdir", help="Subdirectory name")
@@ -236,10 +237,11 @@ def add_combine_task_argument(parser: ArgumentParser):
 
 def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("-n", "--name", type=str, default="Merged", help="Named of created datset directory.")
-    parser.add_argument("--output-size", action=_XSepAction, default="416x736",
+    parser.add_argument("--output-size", action=_XSepAction,
                         help=f"Size of the final image (HxW; separated by 'x'.")
     parser.add_argument("-s", "--show", action="store_true", help="Whether show the annotated image.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Report dropped images.")
+    parser.add_argument("-f", "--force", action="store_true", help="Delte exist output directory, regenernate datset.")
     parser.add_argument("--crop-size", type=int, default=1296, help="Center crop size (default: 1296).")
     parser.add_argument("--roi-offset", type=int, default=0, help="Offset of roi cropping (default: 0).")
     parser.add_argument("--min-area", type=int, default=25 * 25, help="Minimum area that object will be ignored.")
@@ -247,6 +249,7 @@ def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("--max-ratio", type=float, default=2.0, help="Maximum w/h ratio that object will be ignored.")
     parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image.")
     parser.add_argument("--aspect-ratio", action="store_true", help="Maintain aspect ratio.")
+
     return parser
 
 
