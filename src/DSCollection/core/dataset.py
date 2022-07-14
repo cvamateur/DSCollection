@@ -139,7 +139,8 @@ class Dataset(ABC):
                 return klass
         return None
 
-    def check_is_correct_path(self, root: str) -> bool:
+    @classmethod
+    def check_is_correct_path(cls, root: str) -> bool:
         """
         Implement this method to tell whether the input root directory
         is this dataset, which can then allows others to instantiate
@@ -147,8 +148,8 @@ class Dataset(ABC):
         """
         try:
             check_path(root, existence=True)
-            check_path(os.path.join(root, self.imgDirName), existence=True)
-            check_path(os.path.join(root, self.lblDirName), existence=True)
+            check_path(os.path.join(root, cls.imgDirName), existence=True)
+            check_path(os.path.join(root, cls.lblDirName), existence=True)
         except FileNotFoundError:
             return False
         else:
@@ -159,7 +160,7 @@ class Dataset(ABC):
         return list(cls._known_ds.keys())
 
     @abstractmethod
-    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
+    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None, skip_empty: bool = True):
         """
         Load all labels into a list of ImageLabel.
         If clsNames is given, then only load labels of those classes.
@@ -184,7 +185,7 @@ class VOC(Dataset, dtype=DatasetType.VOC):
     def __init__(self, root: str, *_, **__):
         super(VOC, self).__init__(root, *_, **__)
 
-    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
+    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None, skip_empty: bool = True):
         if isinstance(nImgs, float):
             if nImgs <= 0.0 or nImgs > 1.0:
                 msg = "nImgs must be float between (0.0, 1.0]"
@@ -225,6 +226,8 @@ class VOC(Dataset, dtype=DatasetType.VOC):
             label = self.load_label(imgName, lblFile, clsNames)
             if label is not None:
                 labels.append(label)
+            elif not skip_empty:
+                labels.append(ImageLabel(imgName, [], -1, -1, -1))
             else:
                 sys.stderr.write(f"warn: skip image with empty label: {imgName}\n")
         self.labels = labels
@@ -306,7 +309,7 @@ class COCO(Dataset, dtype=DatasetType.COCO):
         assert year in self.YEARS, f"year must be one of {self.YEARS}"
         self.imgDirName = self.imgDirName.format(split=split, year=year)
 
-    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
+    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None, skip_empty: bool = True):
 
         if isinstance(nImgs, float):
             if nImgs <= 0.0 or nImgs > 1.0:
@@ -344,6 +347,8 @@ class COCO(Dataset, dtype=DatasetType.COCO):
             label, imgInfo = self.load_label(_coco, imgId, catIds, mapId2Cls)
             if label is not None:
                 labels.append(label)
+            elif not skip_empty:
+                labels.append(ImageLabel(imgInfo["file_name"], [], -1, -1, -1))
             else:
                 imgName = imgInfo.get("file_name", f"imgId={imgId}")
                 sys.stderr.write(f"warn: skip image with empty label: {imgName}\n")
@@ -435,7 +440,7 @@ class Brainwash(Dataset, dtype="brainwash"):
             return False
         return True
 
-    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
+    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None, skip_empty: bool = True):
         if clsNames is not None:
             sys.stderr.write("warn: brainwash dataset only has one class: head")
         if isinstance(nImgs, float):
@@ -462,6 +467,8 @@ class Brainwash(Dataset, dtype="brainwash"):
             label, imgName = self.load_label(line)
             if label is not None:
                 labels.append(label)
+            elif not skip_empty:
+                labels.append(ImageLabel(imgName, [], -1, -1, -1))
             else:
                 ns += 1
                 if imgName:
@@ -570,7 +577,7 @@ class HT21(Dataset, dtype="ht21"):
             return False
         return True
 
-    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None):
+    def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None, skip_empty: bool = True):
         partitions = glob.glob(os.path.join(self.root, type(self).__name__ + '*'), )
         if not partitions:
             return

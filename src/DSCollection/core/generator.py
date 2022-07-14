@@ -13,7 +13,7 @@ from enum import IntEnum
 from threading import Thread
 from multiprocessing import Process, Queue
 from queue import Queue as threadQueue, Empty
-from typing import List, Dict, Callable, Tuple
+from typing import List, Dict, Callable, Tuple, Type
 
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst, GLib, GObject
@@ -140,7 +140,7 @@ class Generator:
 
         self.input_type, self.input_uris = self.check_inputs(inputs)
         try:
-            cvt = Convertor.from_type(dType)()
+            cvt = Convertor.from_type(dType)
         except ValueError:
             msg = "error: unsupported dtype"
             raise RuntimeError(msg)

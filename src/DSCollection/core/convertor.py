@@ -62,13 +62,16 @@ class Convertor(ABC):
         if dtype not in cls._known_cvt:
             msg = f"Unknown dataset type: {dtype}"
             raise ValueError(msg)
-        return cls._known_cvt[dtype]
+        return cls._known_cvt[dtype]()
 
-    def create_dataset(self, root: str, name: str):
+    @classmethod
+    def create_dataset(cls, root: str, name: str, imgDirName: str = None, lblDirName: str = None):
         dstDir = check_path(root, True)
         root = os.path.join(dstDir, name)
-        os.makedirs(os.path.join(root, self.imgDirName), exist_ok=True)
-        os.makedirs(os.path.join(root, self.lblDirName), exist_ok=True)
+        imgDir = os.path.join(root, imgDirName if lblDirName else cls.imgDirName)
+        lblDir = os.path.join(root, lblDirName if lblDirName else cls.lblDirName)
+        os.makedirs(imgDir, exist_ok=True)
+        os.makedirs(lblDir, exist_ok=True)
         return root
 
     @abstractmethod
