@@ -269,9 +269,11 @@ class Generator:
             msg = f"error: Output directory not exist {dsRoot}"
             raise RuntimeError(msg)
         if subdir:
-            cvt.imgDirName = os.path.join(subdir, cvt.imgDirName)
-            cvt.lblDirName = os.path.join(subdir, cvt.lblDirName)
-        dsRoot = cvt.create_dataset(dsRoot, dsName)
+            imgDirName = os.path.join(subdir, cvt.imgDirName)
+            lblDirName = os.path.join(subdir, cvt.lblDirName)
+        else:
+            imgDirName = lblDirName = ""
+        dsRoot = cvt.create_dataset(dsRoot, dsName, imgDirName, lblDirName)
         imgDir = os.path.join(dsRoot, cvt.imgDirName)
         lblDir = os.path.join(dsRoot, cvt.lblDirName)
         return dsRoot, imgDir, lblDir

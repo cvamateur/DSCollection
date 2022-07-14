@@ -58,11 +58,11 @@ class Convertor(ABC):
     lblDirName = "labels"
 
     @classmethod
-    def from_type(cls, dtype: str) -> Type["Convertor"]:
+    def from_type(cls, dtype: str, *args, **kwargs) -> "Convertor":
         if dtype not in cls._known_cvt:
             msg = f"Unknown dataset type: {dtype}"
             raise ValueError(msg)
-        return cls._known_cvt[dtype]()
+        return cls._known_cvt[dtype](*args, **kwargs)
 
     @classmethod
     def create_dataset(cls, root: str, name: str, imgDirName: str = None, lblDirName: str = None):
