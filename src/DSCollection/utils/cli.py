@@ -142,7 +142,9 @@ def get_cli_parser() -> ArgumentParser:
     processParser = tasks.add_parser(TASK.PROCESS, parents=[commParser, outTypeParser])
     add_process_task_arguments(processParser)
 
-    # augmentationParser = processParser.add_subparsers(title="Augmentation", dest="sub_task")
+    # Add augmentation task parser
+    augmentationParser = tasks.add_parser(TASK.AUGMENTATION, parents=[commParser, outTypeParser])
+    add_augmentation_task_arguments(augmentationParser)
 
     return mainParser
 
@@ -247,11 +249,12 @@ def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("--min-area", type=int, default=25 * 25, help="Minimum area that object will be ignored.")
     parser.add_argument("--min-ratio", type=float, default=0.36, help="Minimum w/h ratio that object will be ignored.")
     parser.add_argument("--max-ratio", type=float, default=2.0, help="Maximum w/h ratio that object will be ignored.")
-    parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image.")
-    parser.add_argument("--aspect-ratio", action="store_true", help="Maintain aspect ratio.")
+    # parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image.")
+    # parser.add_argument("--aspect-ratio", action="store_true", help="Maintain aspect ratio.")
 
     return parser
 
 
 def add_augmentation_task_arguments(parser: ArgumentParser):
-    ...
+    parser.add_argument("-n", "--name", type=str, default="Merged", help="Named of created datset directory.")
+    parser.add_argument("--rotate", type=int, help="Degree of rotate.")
