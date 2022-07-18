@@ -23,6 +23,9 @@ class TASK:
 
     6. process:
         Pre-process a dataset as required.
+
+    7. augmentation:
+        Augmentate dataset.
     """
     EXTRACT = "extract"
     GENERATE = "generate"
@@ -30,14 +33,14 @@ class TASK:
     COMBINE = "combine"
     SPLIT = "split"
     PROCESS = "process"
+    AUGMENTATION = "augmentation"
 
     @classmethod
     def list_all(cls) -> List[str]:
-        return [cls.EXTRACT, cls.GENERATE, cls.VISUALIZE, cls.COMBINE, cls.SPLIT, cls.PROCESS]
+        return [cls.EXTRACT, cls.GENERATE, cls.VISUALIZE, cls.COMBINE, cls.SPLIT, cls.PROCESS, cls.AUGMENTATION]
 
 
 class TaskDispatcher:
-
     _REG_TASK_FN = {}
 
     def __init__(self, task: str):

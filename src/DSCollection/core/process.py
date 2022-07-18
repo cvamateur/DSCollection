@@ -29,21 +29,18 @@ MAX_WORKER = 5
 
 class Process:
 
-    def __init__(self, inputs: List[str], dst_dtype: str, output: str = None, name: str = "Merged",
+    def __init__(self, inputs: List[str], dst_dtype: str, output: str, name: str = "Merged",
                  force: bool = False):
-        if output:
-            self.output = path_join(output, name)
-            if os.path.exists(self.output):
-                if force:
-                    shutil.rmtree(self.output)
-                else:
-                    raise FileExistsError("Output dataset already exist.")
+        self.output = path_join(output, name)
+        if os.path.exists(self.output):
+            if force:
+                shutil.rmtree(self.output)
+            else:
+                raise FileExistsError("Output dataset already exist.")
 
-            self.output_dst = Dataset.from_type(dst_dtype)(output)
-            self.output_dst.create_structure(output, name)
-            self.convertor = Convertor.from_type(dst_dtype)
-        else:
-            self.output_dst = None
+        self.output_dst = Dataset.from_type(dst_dtype)(output)
+        self.output_dst.create_structure(output, name)
+        self.convertor = Convertor.from_type(dst_dtype)
 
         self.datasets = []
         for path in inputs:
@@ -344,12 +341,3 @@ class Process:
                 process_bar.update()
 
 
-class Compose:
-    def __init__(self, transforms: List[Callable]):
-        self.transforms = transforms
-
-    def __call__(self, img: np.ndarray):
-        for t in self.transforms:
-            img = t(img)
-
-        return img
