@@ -175,10 +175,11 @@ def build_output_dtypes_arguments(parser: ArgumentParser = None):
 
 
 def add_generate_task_arguments(parser: ArgumentParser):
+    parser.add_argument("-idx", "--index", action=_OptSeqAction, help="Start index of sequentially named images.")
     parser.add_argument("-s", "--show", action="store_true", help="Show pipeline.")
     parser.add_argument("-m", "--model", dest="models", action="append", default=[], help="Model config file.")
     parser.add_argument("-j", "--num-workers", type=int, help="Number workers.")
-    parser.add_argument("--ext", default=".png", help="Image file extension.")
+    parser.add_argument("--ext", default=".jpg", help="Image file extension.")
     parser.add_argument("--drop-empty", action="store_true", help="Ignore images with empty labels.")
     parser.add_argument("--save-empty-label", action="store_true",
                         help="Generate empty label file even if no targe on image.")

@@ -170,30 +170,66 @@ def build_preprocess(index: int,
     return nBin
 
 
-def build_image_source(pattern: str = "%08d", start_index: int = 0, ext: str = ".png"):
+def build_image_source(index: int,
+                       location: str = "%08d.png",
+                       start_index: int = 0,
+                       width: int = 1296,
+                       height: int = 1296,
+                       gpu_id: int = 0,
+                       mem_type: int = 3):
 
-    name = "image-core"
+    name = "img-src-%u" % index
     nBin = Gst.Bin.new(name)
     _assert_make_element(nBin)
 
-    multifiles = Gst.ElementFactory.make("multifilesrc")
-    multifiles.set_property("location", pattern + ext)
-    multifiles.set_property("index", start_index)
-    multifiles.set_property("caps", Gst.Caps.from_string(f"image/{ext[1:]},framerate=(fraction)1/1"))
-
-    if ext == ".png":
-        imgdec = Gst.ElementFactory.make("pngdec")
-    elif ext in (".jpg", "jpeg"):
-        imgdec = Gst.ElementFactory.make("jpegdec")
-    else:
-        sys.stderr.write("error: ext must be .png or .jpg\n")
+    try:
+        ext = location.split('.')[1]
+    except IndexError:
+        sys.stderr.write(f"error: can not find filename extension from location: {location}\n")
         sys.exit(-1)
 
+    # Multifiles source
+    multifiles = Gst.ElementFactory.make("multifilesrc")
+    multifiles.set_property("location", location)
+    multifiles.set_property("index", start_index)
+    multifiles.set_property("caps", Gst.Caps.from_string(f"image/{ext},framerate=(fraction)1/1"))
+
+    # Image codec
+    if ext == "png":
+        imgdec = Gst.ElementFactory.make("pngdec")
+    elif ext in ("jpg", "jpeg"):
+        imgdec = Gst.ElementFactory.make("jpegdec")
+    else:
+        sys.stderr.write("error: ext must be png or jpg\n")
+        sys.exit(-1)
+
+    # Other elements
+    conv0 = Gst.ElementFactory.make("videoconvert")
+    vrate = Gst.ElementFactory.make("videorate")
+    conv1 = Gst.ElementFactory.make("nvvideoconvert")
+    filter = Gst.ElementFactory.make("capsfilter")
+    conv1.set_property("gpu-id", gpu_id)
+    conv1.set_property("nvbuf-memory-type", mem_type)
+    filter.set_property("caps", Gst.Caps.from_string(
+        f"video/x-raw(memory:NVMM),format=RGBA,height={height},width={width}"))
+
+    # Add to bin
     nBin.add(multifiles)
     nBin.add(imgdec)
-    multifiles.link(imgdec)
+    nBin.add(conv0)
+    nBin.add(vrate)
+    nBin.add(conv1)
+    nBin.add(filter)
 
-    srcpad = imgdec.get_static_pad("src")
+    # Link them all
+    multifiles.link(imgdec)
+    imgdec.link(conv0)
+    conv0.link(vrate)
+    vrate.link(conv1)
+    conv1.link(filter)
+
+    # Add ghost source pad
+    srcpad = filter.get_static_pad("src")
     ghost_src = Gst.GhostPad.new("src", srcpad)
     nBin.add_pad(ghost_src)
 

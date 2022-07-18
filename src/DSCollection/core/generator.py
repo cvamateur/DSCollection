@@ -1,8 +1,10 @@
 import configparser
 import os
+import re
 import sys
 import glob
 import time
+import subprocess
 
 import cv2
 import gi
@@ -13,7 +15,7 @@ from enum import IntEnum
 from threading import Thread
 from multiprocessing import Process, Queue
 from queue import Queue as threadQueue, Empty
-from typing import List, Dict, Callable, Tuple, Type
+from typing import List, Dict, Callable, Tuple, Type, Union
 
 gi.require_version("Gst", "1.0")
 from gi.repository import Gst, GLib, GObject
@@ -23,17 +25,17 @@ from ..core.dataset import DatasetType, Box, ImageLabel
 from ..core.convertor import Convertor, LabelInfo
 from ..utils.common import check_path, is_video, is_image
 from ..utils.imgutil import ImageUtil
-from .gst import build_uri_source, build_preprocess
+from .gst import build_uri_source, build_preprocess, build_image_source
 
-g_count: int = 0                    # The number of consecutive frames that have been processed
-g_num_srcs: int = 0                 # Number of sources already in pipeline
-g_sync_num: int = 150               # Threshold trigger synchronizing buffer
-g_uri_list: List[str]               # Static array containing current URIs
-g_enabled_list: List[bool]          # Static array containing flags that indicate corresponding sources are enabled
-g_eos_list: List[bool]              # Static array containing flags that indicate corresponding sources reached eos
-g_src_list: List[Gst.Element]       # Static array containing current source elements
-g_prc_list: List[Gst.Element]       # Static array containing current preprocess elements
-g_cls_dict: Dict[int, List[str]]    # Map model unique-id to class names
+g_count: int = 0                # The number of consecutive frames that have been processed
+g_num_srcs: int = 0             # Number of sources already in pipeline
+g_sync_num: int = 150           # Threshold triggers synchronizing buffer
+g_uri_list: List[str]           # Static array containing current URIs
+g_enabled_list: List[bool]      # Static array containing flags that indicate corresponding sources are enabled
+g_eos_list: List[bool]          # Static array containing flags that indicate corresponding sources reached eos
+g_src_list: List[Gst.Element]   # Static array containing current source elements
+g_prc_list: List[Gst.Element]   # Static array containing current preprocess elements
+g_cls_dict: Dict[int, List[str]]  # Map model unique-id to class names
 
 
 class InputType(IntEnum):
@@ -54,11 +56,11 @@ class _GeneratorDaemon(Process):
     def __init__(self, index: int, queue: Queue):
         super(_GeneratorDaemon, self).__init__()
         self.index = index
-        self.name = f"{index} - Subprocess"
+        self.name = f"Subprocess - {index}"
         self.queue = queue
         self.daemon = True
         self._buffer = threadQueue()
-        self._num_workers = 2
+        self._num_workers = 3
         self._worker = []
 
     def run(self) -> None:
@@ -69,12 +71,16 @@ class _GeneratorDaemon(Process):
 
         # Start two threads
         for i in range(self._num_workers):
-            worker = _GeneratorDaemonWorker(self._buffer)
+            worker = _GeneratorDaemonWorker(self._buffer, self.index, i)
             worker.start()
             self._worker.append(worker)
 
         while True:
-            data = self.queue.get()
+            try:
+                data = self.queue.get(timeout=10)
+            except Empty:
+                sys.stderr.write(f"{self.name}: timeout, quit\n")
+                break
             if data is None:
                 for i in range(self._num_workers):
                     self._buffer.put(None)
@@ -92,14 +98,19 @@ class _GeneratorDaemon(Process):
 
 class _GeneratorDaemonWorker(Thread):
 
-    def __init__(self, queue: threadQueue):
+    def __init__(self, queue: threadQueue, pIdx: int, tIdx: int):
         super(_GeneratorDaemonWorker, self).__init__()
         self._q = queue
+        self.name = f"[{pIdx}] Thread - {tIdx}"
         self.daemon = True
 
     def run(self) -> None:
         while True:
-            content = self._q.get()
+            try:
+                content = self._q.get(timeout=10)
+            except Empty:
+                sys.stderr.write(f"{self.name}: timeout, quit\n")
+                break
             if content is None:
                 break
             data, path = content
@@ -114,11 +125,13 @@ class Generator:
     deepstream models.
     """
 
-    def __init__(self, inputs: List[str], outDir: str,
+    def __init__(self, inputs: List[str],
+                 outDir: str,
                  models: List[str] = None,
                  dType: str = DatasetType.KITTI,
                  subdir: str = "",
                  imgExt: str = ".png",
+                 indices: List[int] = None,
                  max_srcs: int = None,
                  skip_mode: int = None,
                  interval: int = None,
@@ -127,41 +140,42 @@ class Generator:
                  crop_size: int = None,
                  memory_type: int = None,
                  num_workers: int = None,
+                 show_pipe: bool = False,
                  contiguous: bool = False,
                  drop_empty: bool = False,
                  save_empty_label: bool = False):
 
-        global g_enabled_list
-        global g_eos_list
-        global g_uri_list
-        global g_src_list
-        global g_prc_list
-        global g_cls_dict
-
+        # Initialize input paths
         self.input_type, self.input_uris = self.check_inputs(inputs)
+        if self.input_type == InputType.IMAGE and indices:
+            if len(indices) == 1:
+                indices = indices * len(self.input_uris)
+            assert len(indices) == len(self.input_uris)
+            self.indices = [int(i) for i in indices]
+
+        # Initialize output path
         try:
             cvt = Convertor.from_type(dType)
         except ValueError:
             msg = "error: unsupported dtype"
             raise RuntimeError(msg)
         self.outDir, self.imgDir, self.lblDir = self.check_output(outDir, subdir, cvt)
-        self.models = self.check_models(models)
         self.imgExt = imgExt if is_image(imgExt) else ".jpg"
         self.lblExt = cvt.lblExt
-        self.convert_label = cvt.convert_label
-        self.max_srcs = 1 if not max_srcs else max(1, int(max_srcs))
+        self.cvt_label_func = cvt.convert_label
+
+        # Initialize models if given
+        self.models = self.check_models(models)
+
+        # Initialize global variables
+        self.max_srcs = 1 if not max_srcs else min(max(1, int(max_srcs)), len(self.input_uris))
         if self.max_srcs == 1 and len(self.input_uris) > 1:
             self.max_srcs = min(4, len(self.input_uris))
             sys.stderr.write(f"warn: max_srcs=1 while multiple sources found\n")
             sys.stderr.write(f"warn: update max_srcs={self.max_srcs}\n")
 
-        # Initialization of global variables
-        g_enabled_list = [False] * self.max_srcs
-        g_eos_list = [True] * self.max_srcs
-        g_uri_list = [""] * self.max_srcs
-        g_src_list = [None] * self.max_srcs
-        g_prc_list = [None] * self.max_srcs
-        g_cls_dict = {}
+        self.init_global_state()
+        self.show_pipe = show_pipe
         self.contiguous = contiguous
         self.drop_empty = drop_empty
         self.save_empty_label = save_empty_label
@@ -187,10 +201,10 @@ class Generator:
         self.crop_size = 1296 if not crop_size else max(100, min(1296, int(crop_size)))
         self.mem_type = MemoryType.CUDA_UNIFIED if not memory_type else max(0, min(3, int(memory_type)))
 
-        # Initialization of thread that save img-bytes and lbl-bytes
+        # Initialization of workers that save img-bytes and lbl-bytes
         self.num_workers = 1 if not num_workers else max(1, min(os.cpu_count() - 1, int(num_workers)))
         self.buffer = Queue()
-        self.workers = []
+        self.workers: List[_GeneratorDaemon] = []
         for i in range(self.num_workers):
             worker = _GeneratorDaemon(i, self.buffer)
             worker.start()
@@ -200,6 +214,21 @@ class Generator:
         sys.stdout.write(f"INFO: Generator initialization complete\n")
         sys.stdout.write(f"INFO: Number of inputs: {len(self.input_uris)}\n")
         sys.stdout.write(f"INFO: Output path: {self.outDir}\n")
+
+    def init_global_state(self):
+        global g_enabled_list
+        global g_eos_list
+        global g_uri_list
+        global g_src_list
+        global g_prc_list
+        global g_cls_dict
+
+        g_enabled_list = [False] * self.max_srcs
+        g_eos_list = [True] * self.max_srcs
+        g_uri_list = [""] * self.max_srcs
+        g_src_list = [None] * self.max_srcs
+        g_prc_list = [None] * self.max_srcs
+        g_cls_dict = {}
 
     def check_inputs(self, inputs: List[str]):
         """
@@ -211,12 +240,17 @@ class Generator:
             - Directories include wildcard
         """
         input_uris = []
-
         input_type = None
         for inputPath in inputs:
             pathList = glob.glob(os.path.expanduser(inputPath))
             if not pathList:
-                sys.stderr.write("warn: got invalid input path: %s\n" % inputPath)
+                ext = self._parse_image_location(inputPath)[2]
+                if is_image(ext):
+                    input_type = InputType.IMAGE
+                    input_uris.append(inputPath)
+                else:
+                    sys.stderr.write("warn: got invalid input path: %s\n" % inputPath)
+
             for path in pathList:
                 path = os.path.abspath(path)
                 path_type, files = self._check_input_type(path)
@@ -259,6 +293,16 @@ class Generator:
         return InputType.UNKNOWN, []
 
     @staticmethod
+    def _parse_image_location(path: str) -> Tuple[str, str, str]:
+        input_images_pattern = re.compile(r"(.*)(%\d*[u\d])(\.\w+)")
+        matched = input_images_pattern.match(path)
+        if matched:
+            prefix, name, ext = matched.groups()
+            return prefix, name, ext
+        else:
+            return "", "", ""
+
+    @staticmethod
     def check_output(output_dir: str, subdir: str, cvt: Convertor):
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
         if os.path.exists(output_dir):
@@ -268,14 +312,16 @@ class Generator:
         if not os.path.exists(dsRoot):
             msg = f"error: Output directory not exist {dsRoot}"
             raise RuntimeError(msg)
+
+        imgDirName = cvt.imgDirName
+        lblDirName = cvt.lblDirName
         if subdir:
             imgDirName = os.path.join(subdir, cvt.imgDirName)
             lblDirName = os.path.join(subdir, cvt.lblDirName)
-        else:
-            imgDirName = lblDirName = ""
+
         dsRoot = cvt.create_dataset(dsRoot, dsName, imgDirName, lblDirName)
-        imgDir = os.path.join(dsRoot, cvt.imgDirName)
-        lblDir = os.path.join(dsRoot, cvt.lblDirName)
+        imgDir = os.path.join(dsRoot, imgDirName)
+        lblDir = os.path.join(dsRoot, lblDirName)
         return dsRoot, imgDir, lblDir
 
     @staticmethod
@@ -318,115 +364,16 @@ class Generator:
             return
         dot_data = Gst.debug_bin_to_dot_data(self.pipeline, Gst.DebugGraphDetails.ALL)
         self._pipeline_dot = os.path.join(self.outDir, "pipeline.dot")
+        _pipeline_png = os.path.join(self.outDir, "pipeline.png")
         with open(self._pipeline_dot, 'w', encoding="utf-8") as f:
             f.write(dot_data)
-        print("[Success] Save dot: %s\n" % self._pipeline_dot)
+        subprocess.run(["dot", "-Tpng", f"-o{_pipeline_png}", self._pipeline_dot])
+        sys.stdout.write("[SUCCESS] pipeline has saved as pipeline.dot\n")
 
-    def run_loop(self):
-        self.loop = GLib.MainLoop.new(None, False)
-        bus = self.pipeline.get_bus()
-        bus.add_signal_watch()
-        bus.connect("message", bus_call, self)
-
-        GLib.timeout_add_seconds(1, watch_dog, self)
-
-        self.pipeline.set_state(Gst.State.PLAYING)
-        try:
-            self.loop.run()
-        except Exception:
-            pass
-        self.pipeline.set_state(Gst.State.NULL)
-
-    def add_video_sources(self):
-        global g_num_srcs
-        global g_enabled_list
-        global g_eos_list
-        global g_uri_list
-        global g_src_list
-        global g_prc_list
-
-        for i in range(self.max_srcs):
-            if g_enabled_list[i]:
-                continue
-            if not g_eos_list[i]:
-                continue
-            try:
-                uri = self.input_uris.pop()
-            except IndexError:
-                return
-
-            src_bin = build_uri_source(i, uri, self.skip_mode, self.interval, self.gpu_id)
-            prc_bin = build_preprocess(i, self.cam_shifts, self.crop_size, self.gpu_id, self.mem_type)
-            self.pipeline.add(src_bin)
-            self.pipeline.add(prc_bin)
-            src_bin.link(prc_bin)
-            for j in range(2):
-                srcpad = prc_bin.get_static_pad("src_%u" % j)
-                sinkpad = self.streammux.get_request_pad("sink_%u" % (2 * i + j))
-                if not srcpad or not sinkpad:
-                    sys.stderr.write("error: unable to link source %d with streamux\n" % i)
-                    sys.exit(-1)
-                srcpad.link(sinkpad)
-
-            # Sync states for dynamic pipeline
-            if not src_bin.sync_state_with_parent() or \
-                    not prc_bin.sync_state_with_parent():
-                sys.stderr.write("warn: failed on source(%d): %s\n" % (i, uri))
-                self.pipeline.remove(src_bin)
-                self.pipeline.remove(prc_bin)
-                src_bin.set_state(Gst.State.NULL)
-                prc_bin.set_state(Gst.State.NULL)
-                continue
-
-            sys.stdout.write("add new source(%d): %s\n" % (i, uri))
-            g_enabled_list[i] = True
-            g_eos_list[i] = False
-            g_uri_list[i] = uri
-            g_src_list[i] = src_bin
-            g_prc_list[i] = prc_bin
-            g_num_srcs += 1
-
-    def delete_video_sources(self):
-        global g_num_srcs
-        global g_enabled_list
-        global g_eos_list
-        global g_uri_list
-        global g_src_list
-        global g_prc_list
-
-        for i in range(self.max_srcs):
-            if not g_eos_list[i]:
-                continue
-            if not g_enabled_list[i]:
-                continue
-            src_bin = g_src_list[i]
-            prc_bin = g_prc_list[i]
-            uri = g_uri_list[i]
-
-            # Change state to release resources
-            ret = src_bin.set_state(Gst.State.NULL)
-            ret = prc_bin.set_state(Gst.State.NULL)
-            if ret == Gst.StateChangeReturn.FAILURE:
-                sys.stderr.write("warn: unable to release source(%d): %s\n" % (i, uri))
-                continue
-            if ret == Gst.StateChangeReturn.ASYNC:
-                src_bin.get_state(Gst.CLOCK_TIME_NONE)
-                prc_bin.get_state(Gst.CLOCK_TIME_NONE)
-            self.pipeline.remove(src_bin)
-            self.pipeline.remove(prc_bin)
-            for j in range(2):
-                sinkpad = self.streammux.get_static_pad("sink_%u" % (2 * i + j))
-                sinkpad.send_event(Gst.Event.new_flush_stop(False))
-                self.streammux.release_request_pad(sinkpad)
-
-            sys.stdout.write("delete source(%d): %s\n" % (i, uri))
-            g_num_srcs -= 1
-            g_enabled_list[i] = False
-            g_uri_list[i] = ""
-            g_src_list[i] = None
-            g_prc_list[i] = None
-
-    def build_video_pipeline(self, show_pipe: bool = False):
+    def build_pipeline(self):
+        """
+        Build a pipeline which accept raw fisheye videos as input.
+        """
         global g_cls_dict
 
         pipeline = Gst.Pipeline()
@@ -442,10 +389,10 @@ class Generator:
         streammux.set_property("width", self.crop_size)
         streammux.set_property("height", self.crop_size)
         streammux.set_property("batched-push-timeout", 2500)
-        streammux.set_property("batch-size", 2 * self.max_srcs)
         streammux.set_property("gpu_id", self.gpu_id)
         streammux.set_property("nvbuf-memory-type", self.mem_type)
         streammux.set_property("sync-inputs", False)
+        streammux.set_property("batch-size", 2 * self.max_srcs)
         pipeline.add(streammux)
 
         last = streammux
@@ -477,7 +424,7 @@ class Generator:
                 clsNames = [l.strip() for l in f.readlines() if l]
             g_cls_dict[unique_id] = clsNames
 
-        if show_pipe:
+        if self.show_pipe:
             tile = Gst.ElementFactory.make("nvmultistreamtiler")
             conv = Gst.ElementFactory.make("nvvideoconvert")
             nosd = Gst.ElementFactory.make("nvdsosd")
@@ -486,15 +433,27 @@ class Generator:
                 sys.stderr.write("error: unable to create nveglglessink\n")
                 sys.exit(-1)
 
-            if self.max_srcs == 1:
-                rows, cols = 1, 2
-                width, height = 1920, 960
-            elif self.max_srcs == 2:
-                rows, cols = 2, 2
-                width, height = 1080, 1080
+            if self.input_type == InputType.VIDEO:
+                if self.max_srcs == 1:
+                    rows, cols = 1, 2
+                    width, height = 1920, 960
+                elif self.max_srcs == 2:
+                    rows, cols = 2, 2
+                    width, height = 1080, 1080
+                else:
+                    rows, cols = 2, 4
+                    width, height = 1920, 960
             else:
-                rows, cols = 2, 4
-                width, height = 1920, 960
+                if self.max_srcs == 1:
+                    rows = cols = 1
+                    width = height = 960
+                elif self.max_srcs == 2:
+                    rows, cols = 1, 2
+                    width, height = 1920, 960
+                else:
+                    rows = cols = 2
+                    width = height = 1080
+
             tile.set_property("rows", rows)
             tile.set_property("columns", cols)
             tile.set_property("width", width)
@@ -522,7 +481,191 @@ class Generator:
         self.pipeline = pipeline
         self.streammux = streammux
         srcpad = last.get_static_pad("src")
-        srcpad.add_probe(Gst.PadProbeType.BUFFER, self.probe_func, self)
+        srcpad.add_probe(Gst.PadProbeType.BUFFER, probe_func, self)
+
+    def add_sources(self):
+        if self.input_type == InputType.VIDEO:
+            self._add_video_sources()
+        elif self.input_type == InputType.IMAGE:
+            self._add_image_sources()
+        else:
+            # MUST NEVER REACH HEAR!
+            msg = "error: unknown input-type"
+            raise RuntimeError(msg)
+
+    def delete_sources(self):
+        if self.input_type == InputType.VIDEO:
+            self._delete_video_sources()
+        elif self.input_type == InputType.IMAGE:
+            self._delete_image_sources()
+        else:
+            # MUST NEVER REACH HEAR!
+            msg = "error: unknown input-type"
+            raise RuntimeError(msg)
+
+    def _add_video_sources(self):
+        global g_num_srcs
+        global g_enabled_list
+        global g_eos_list
+        global g_uri_list
+        global g_src_list
+        global g_prc_list
+
+        for i in range(self.max_srcs):
+            if g_enabled_list[i]:
+                continue
+            if not g_eos_list[i]:
+                continue
+            try:
+                uri = self.input_uris.pop()
+            except IndexError:
+                return
+
+            src_bin = build_uri_source(i, uri, self.skip_mode, self.interval, self.gpu_id)
+            prc_bin = build_preprocess(i, self.cam_shifts, self.crop_size, self.gpu_id, self.mem_type)
+            self.pipeline.add(src_bin)
+            self.pipeline.add(prc_bin)
+            src_bin.link(prc_bin)
+            for j in range(2):
+                srcpad = prc_bin.get_static_pad("src_%u" % j)
+                sinkpad = self.streammux.get_request_pad("sink_%u" % (2 * i + j))
+                if not srcpad or not sinkpad:
+                    sys.stderr.write("error: unable to link source %d with streammux\n" % i)
+                    sys.exit(-1)
+                srcpad.link(sinkpad)
+
+            # Sync states for dynamic pipeline
+            if not src_bin.sync_state_with_parent() or \
+                    not prc_bin.sync_state_with_parent():
+                sys.stderr.write("warn: failed on source(%d): %s\n" % (i, uri))
+                self.pipeline.remove(src_bin)
+                self.pipeline.remove(prc_bin)
+                src_bin.set_state(Gst.State.NULL)
+                prc_bin.set_state(Gst.State.NULL)
+                continue
+
+            sys.stdout.write("add new source(%d): %s\n" % (i, uri))
+            g_enabled_list[i] = True
+            g_eos_list[i] = False
+            g_uri_list[i] = uri
+            g_src_list[i] = src_bin
+            g_prc_list[i] = prc_bin
+            g_num_srcs += 1
+
+    def _delete_video_sources(self):
+        global g_num_srcs
+        global g_enabled_list
+        global g_eos_list
+        global g_uri_list
+        global g_src_list
+        global g_prc_list
+
+        for i in range(self.max_srcs):
+            if not g_eos_list[i]:
+                continue
+            if not g_enabled_list[i]:
+                continue
+            src_bin = g_src_list[i]
+            prc_bin = g_prc_list[i]
+            uri = g_uri_list[i]
+
+            # Change state to release resources
+            ret = src_bin.set_state(Gst.State.NULL)
+            ret = prc_bin.set_state(Gst.State.NULL)
+            if ret == Gst.StateChangeReturn.FAILURE:
+                sys.stderr.write("warn: unable to release source(%d)\n" % i)
+                continue
+            if ret == Gst.StateChangeReturn.ASYNC:
+                src_bin.get_state(Gst.CLOCK_TIME_NONE)
+                prc_bin.get_state(Gst.CLOCK_TIME_NONE)
+            self.pipeline.remove(src_bin)
+            self.pipeline.remove(prc_bin)
+            for j in range(2):
+                sinkpad = self.streammux.get_static_pad("sink_%u" % (2 * i + j))
+                sinkpad.send_event(Gst.Event.new_flush_stop(False))
+                self.streammux.release_request_pad(sinkpad)
+
+            sys.stdout.write("delete source(%d)\n" % i)
+            g_num_srcs -= 1
+            g_enabled_list[i] = False
+            g_uri_list[i] = ""
+            g_src_list[i] = None
+            g_prc_list[i] = None
+
+    def _add_image_sources(self):
+        global g_num_srcs
+        global g_enabled_list
+        global g_eos_list
+        global g_uri_list
+        global g_src_list
+
+        for i in range(self.max_srcs):
+            if g_enabled_list[i]:
+                continue
+            if not g_eos_list[i]:
+                continue
+            try:
+                location = self.input_uris.pop()
+                index = self.indices[i]
+            except (IndexError, AttributeError):
+                return
+
+            src_bin = build_image_source(i, location, index, self.crop_size, self.crop_size, self.gpu_id, self.mem_type)
+            self.pipeline.add(src_bin)
+            srcpad = src_bin.get_static_pad("src")
+            sinkpad = self.streammux.get_request_pad("sink_%u" % i)
+            if not srcpad or not sinkpad:
+                sys.stderr.write("error: unable to link source %d with streammux\n" % i)
+                sys.exit(-1)
+            srcpad.link(sinkpad)
+
+            # Sync states for dynamic pipeline
+            if not src_bin.sync_state_with_parent():
+                sys.stderr.write("warn: failed on source(%d): %s\n" % (i, location))
+                self.pipeline.remove(src_bin)
+                src_bin.set_state(Gst.State.NULL)
+                continue
+
+            sys.stdout.write("add new source(%d): %s\n" % (i, location))
+            g_enabled_list[i] = True
+            g_eos_list[i] = False
+            g_uri_list[i] = location
+            g_src_list[i] = src_bin
+            g_num_srcs += 1
+
+    def _delete_image_sources(self):
+        global g_num_srcs
+        global g_enabled_list
+        global g_eos_list
+        global g_uri_list
+        global g_src_list
+
+        for i in range(self.max_srcs):
+            if not g_eos_list[i]:
+                continue
+            if not g_enabled_list[i]:
+                continue
+            src_bin = g_src_list[i]
+            location = g_uri_list[i]
+
+            # Change state to release resources
+            ret = src_bin.set_state(Gst.State.NULL)
+            if ret == Gst.StateChangeReturn.FAILURE:
+                sys.stderr.write("warn: unable to release source(%d)\n" % i)
+                continue
+            if ret == Gst.StateChangeReturn.ASYNC:
+                src_bin.get_state(Gst.CLOCK_TIME_NONE)
+            self.pipeline.remove(src_bin)
+            sinkpad = self.streammux.get_static_pad("sink_%u" % i)
+            sinkpad.send_event(Gst.Event.new_flush_stop(False))
+            self.streammux.release_request_pad(sinkpad)
+
+            sys.stdout.write("delete source(%d)\n" % i)
+            g_num_srcs -= 1
+            g_enabled_list[i] = False
+            g_uri_list[i] = ""
+            g_src_list[i] = None
+            g_prc_list[i] = None
 
     def synchronize(self):
 
@@ -551,7 +694,7 @@ class Generator:
             progress.close()
             self.pipeline.set_state(Gst.State.PLAYING)
 
-    def wait_until_finish(self):
+    def _wait_until_finish(self):
         for _ in range(self.num_workers):
             self.buffer.put(None)
         total = self.buffer.qsize()
@@ -570,86 +713,108 @@ class Generator:
         for worker in self.workers:
             worker.join()
 
-    def probe_func(self, pad: Gst.Pad, info: Gst.PadProbeInfo, user_data) -> Gst.PadProbeReturn:
-        global g_count
-        global g_cls_dict
+    def run(self):
 
-        contiguous = self.contiguous
-        drop_empty = self.drop_empty
-        save_empty_label = self.save_empty_label
-        imgPathFMT = self.imgPathFMT
-        lblPathFMT = self.lblPathFMT
-        buffer = self.buffer
-        convert_label = self.convert_label
+        while self.input_uris:
+            self.loop = GLib.MainLoop.new(None, False)
 
-        gst_buffer = info.get_buffer()
-        if not gst_buffer:
-            sys.stderr.write("warn: unable to get buffer\n")
-            return Gst.PadProbeReturn.OK
+            self.build_pipeline()
+            bus = self.pipeline.get_bus()
+            bus.add_signal_watch()
+            bus.connect("message", bus_call, self)
+            GLib.timeout_add_seconds(1, watch_dog, self)
+            self.pipeline.set_state(Gst.State.PLAYING)
 
-        batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
-        l_frame = batch_meta.frame_meta_list
-        while l_frame is not None:
             try:
-                frame_meta = pyds.NvDsFrameMeta.cast(l_frame.data)
-            except StopIteration:
-                break
-
-            frame_idx = frame_meta.frame_num
-            batch_idx = frame_meta.batch_id
-            stream_idx = frame_meta.pad_index
-            source_idx = stream_idx // 2
-            width = frame_meta.source_frame_width
-            height = frame_meta.source_frame_height
-
-            # Traverse objects detected by gie
-            boxes = []
-            l_obj = frame_meta.obj_meta_list
-            while l_obj is not None:
-                try:
-                    obj_meta = pyds.NvDsObjectMeta.cast(l_obj.data)
-                except StopIteration:
-                    break
-
-                obj_uid = obj_meta.unique_component_id
-                cls_id = obj_meta.class_id
-                clsName = g_cls_dict[obj_uid][cls_id]
-                rect = obj_meta.rect_params
-                left, top, w, h = rect.left, rect.top, rect.width, rect.height
-                bbox = Box(rect.left, rect.top, left + w, top + h, clsName)
-                boxes.append(bbox)
-
-                try:
-                    l_obj = l_obj.next
-                except StopIteration:
-                    break
-
-            if boxes or not drop_empty:
-                frame = pyds.get_nvds_buf_surface(hash(gst_buffer), batch_idx)
-                frame = np.array(frame, copy=True, order='C')
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
-                if contiguous:
-                    imgPath = imgPathFMT.format(count=g_count)
-                    lblPath = lblPathFMT.format(count=g_count)
+                self.loop.run()
+            except Exception as e:
+                sys.stderr.write("warn: errors occur during running: %s\n" % e)
+            finally:
+                self.save_dot()
+                self.pipeline.set_state(Gst.State.NULL)
+                if self.input_type == InputType.VIDEO:
+                    self._delete_video_sources()
                 else:
-                    uri_name = os.path.basename(g_uri_list[source_idx]).split('.')[0]
-                    imgPath = imgPathFMT.format(name=uri_name, fIdx=frame_idx, cIdx=stream_idx % 2)
-                    lblPath = lblPathFMT.format(name=uri_name, fIdx=frame_idx, cIdx=stream_idx % 2)
-                if not boxes and not save_empty_label:
-                    lblPath = ""
+                    self._delete_image_sources()
+                self.init_global_state()
 
-                imgName = os.path.basename(imgPath)
-                imgLbl = ImageLabel(imgName, boxes, width, height)
-                lblInfo = convert_label(g_count, imgLbl)
-                buffer.put((frame, lblInfo, imgPath, lblPath))
-                g_count += 1
+        self._wait_until_finish()
 
+
+def probe_func(pad: Gst.Pad, info: Gst.PadProbeInfo, gen: Generator) -> Gst.PadProbeReturn:
+    global g_count
+    global g_cls_dict
+
+    gst_buffer = info.get_buffer()
+    if not gst_buffer:
+        sys.stderr.write("warn: unable to get buffer\n")
+        return Gst.PadProbeReturn.OK
+
+    batch_meta = pyds.gst_buffer_get_nvds_batch_meta(hash(gst_buffer))
+    l_frame = batch_meta.frame_meta_list
+    while l_frame is not None:
+        try:
+            frame_meta = pyds.NvDsFrameMeta.cast(l_frame.data)
+        except StopIteration:
+            break
+
+        frame_idx = frame_meta.frame_num
+        batch_idx = frame_meta.batch_id
+        stream_idx = frame_meta.pad_index
+        source_idx = stream_idx // 2
+        width = frame_meta.source_frame_width
+        height = frame_meta.source_frame_height
+
+        print(f"[{width}x{height}] fIdx: {frame_idx}, bIdx: {batch_idx}, sIdx: {stream_idx}")
+
+        # Traverse objects detected by gie
+        boxes = []
+        l_obj = frame_meta.obj_meta_list
+        while l_obj is not None:
             try:
-                l_frame = l_frame.next
+                obj_meta = pyds.NvDsObjectMeta.cast(l_obj.data)
             except StopIteration:
                 break
 
-        return Gst.PadProbeReturn.OK
+            obj_uid = obj_meta.unique_component_id
+            cls_id = obj_meta.class_id
+            clsName = g_cls_dict[obj_uid][cls_id]
+            rect = obj_meta.rect_params
+            left, top, w, h = rect.left, rect.top, rect.width, rect.height
+            bbox = Box(rect.left, rect.top, left + w, top + h, clsName)
+            boxes.append(bbox)
+
+            try:
+                l_obj = l_obj.next
+            except StopIteration:
+                break
+
+        if boxes or not gen.drop_empty:
+            frame = pyds.get_nvds_buf_surface(hash(gst_buffer), batch_idx)
+            frame = np.array(frame, copy=True, order='C')
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
+            if gen.contiguous:
+                imgPath = gen.imgPathFMT.format(count=g_count)
+                lblPath = gen.lblPathFMT.format(count=g_count)
+            else:
+                uri_name = os.path.basename(g_uri_list[source_idx]).split('.')[0]
+                imgPath = gen.imgPathFMT.format(name=uri_name, fIdx=frame_idx, cIdx=stream_idx % 2)
+                lblPath = gen.lblPathFMT.format(name=uri_name, fIdx=frame_idx, cIdx=stream_idx % 2)
+            if not boxes and not gen.save_empty_label:
+                lblPath = ""
+
+            imgName = os.path.basename(imgPath)
+            imgLbl = ImageLabel(imgName, boxes, width, height)
+            lblInfo = gen.cvt_label_func(g_count, imgLbl)
+            gen.buffer.put((frame, lblInfo, imgPath, lblPath))
+            g_count += 1
+
+        try:
+            l_frame = l_frame.next
+        except StopIteration:
+            break
+
+    return Gst.PadProbeReturn.OK
 
 
 def bus_call(bus, message, gen: Generator):
@@ -694,8 +859,8 @@ def watch_dog(gen: Generator):
 
     gen.synchronize()
 
-    gen.delete_video_sources()
+    gen.delete_sources()
 
-    gen.add_video_sources()
+    gen.add_sources()
 
     return g_num_srcs != 0 or len(gen.input_uris) > 0
