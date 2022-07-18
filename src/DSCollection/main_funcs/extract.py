@@ -7,7 +7,7 @@ from ..core.dataset import Dataset
 @TaskDispatcher(TASK.EXTRACT)
 def main(args):
     try:
-        cvt = Convertor.from_type(args.dtype)()
+        cvt = Convertor.from_type(args.dtype)
     except ValueError:
         msg = f"Unknown convertor type: {args.dtype}"
         raise RuntimeError(msg)

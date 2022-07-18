@@ -60,7 +60,7 @@ class _GeneratorDaemon(Process):
         self.queue = queue
         self.daemon = True
         self._buffer = threadQueue()
-        self._num_workers = 3
+        self._num_workers = 2
         self._worker = []
 
     def run(self) -> None:

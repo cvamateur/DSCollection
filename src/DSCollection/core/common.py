@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 MAX_WORKER = 5
 CHUNK_SIZE = 10
 
-executor = ThreadPoolExecutor(max_workers=MAX_WORKER)
+_executor = ThreadPoolExecutor(max_workers=MAX_WORKER)
 
 
 # TODO :recycle:
@@ -45,7 +45,7 @@ def read_image(labels: List[ImageLabel], root: str, img_dir_name: str) -> Dict[F
     future = {}
     for lbl in labels:
         img_path = path_join(root, img_dir_name, lbl.fileName)
-        future.update({executor.submit(_read_image, img_path): lbl})
+        future.update({_executor.submit(_read_image, img_path): lbl})
 
     return future
 
