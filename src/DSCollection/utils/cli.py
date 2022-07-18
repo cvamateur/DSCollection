@@ -1,6 +1,6 @@
 import argparse
-import sys
 import ast
+import sys
 from functools import partial
 
 from .tasks import TASK
@@ -243,18 +243,18 @@ def add_process_task_arguments(parser: ArgumentParser):
                         help=f"Size of the final image (HxW; separated by 'x'.")
     parser.add_argument("-s", "--show", action="store_true", help="Whether show the annotated image.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Report dropped images.")
-    parser.add_argument("-f", "--force", action="store_true", help="Delte exist output directory, regenernate datset.")
+    parser.add_argument("-f", "--force", action="store_true",
+                        help="Delete exist output directory, regenernate dataset.")
     parser.add_argument("--crop-size", type=int, default=1296, help="Center crop size (default: 1296).")
     parser.add_argument("--roi-offset", type=int, default=0, help="Offset of roi cropping (default: 0).")
     parser.add_argument("--min-area", type=int, default=25 * 25, help="Minimum area that object will be ignored.")
     parser.add_argument("--min-ratio", type=float, default=0.36, help="Minimum w/h ratio that object will be ignored.")
     parser.add_argument("--max-ratio", type=float, default=2.0, help="Maximum w/h ratio that object will be ignored.")
-    # parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image.")
-    # parser.add_argument("--aspect-ratio", action="store_true", help="Maintain aspect ratio.")
 
     return parser
 
 
 def add_augmentation_task_arguments(parser: ArgumentParser):
     parser.add_argument("-n", "--name", type=str, default="Merged", help="Named of created datset directory.")
-    parser.add_argument("--rotate", type=int, help="Degree of rotate.")
+    parser.add_argument("-r", "--rotate", type=int, default=0, help="Degree of rotate.")
+    parser.add_argument("--divide-number", type=int, default=3, help="The number of split for rotated label.")

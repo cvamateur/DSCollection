@@ -14,8 +14,8 @@ def main(args):
     aug = Augmentation(args.output, args.name, args.dtype, args.contiguous)
     invoker = Invoker()
 
-    if args.rotate:
-        cmd = Rotate(aug)
+    if args.rotate != 0:
+        cmd = Rotate(aug, args.rotate, args.divide_number)
         invoker.command(cmd)
 
     if args.output:
@@ -23,7 +23,7 @@ def main(args):
         invoker.command(cmd)
 
     input_datasets = []
-    for path in args.inputs:
+    for path in args.input:
         path = check_path(path)
         data_class = Dataset.find_dataset(path)
         if data_class is None:
