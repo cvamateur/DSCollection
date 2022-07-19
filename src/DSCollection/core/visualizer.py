@@ -4,7 +4,9 @@ import threading
 
 import cv2
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
+matplotlib.use('TkAgg')
 
 from queue import Queue
 from enum import IntEnum
