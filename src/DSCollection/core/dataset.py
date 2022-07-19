@@ -425,6 +425,7 @@ class Brainwash(Dataset, dtype="brainwash"):
 
     def __init__(self, root: str, *_, split: str = "train", **__):
         super(Brainwash, self).__init__(root, *_, **__)
+        assert split is not None, "split is not given"
         self.lblPath = check_path(os.path.join(self.root, f"brainwash_{split}.idl"))
 
     @classmethod

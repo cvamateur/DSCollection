@@ -215,7 +215,7 @@ def add_visualize_task_arguments(parser: ArgumentParser):
     parser.add_argument("-n", "--num-images", type=int, default=10, help="Number images to show.")
     parser.add_argument("--class-names", action=_OptSeqAction, help=f"A set of class names seperated by '{OPTSEP}'.")
     parser.add_argument("--backend", type=int, default=0, help="0: OpenCV (default); 1: Matplotlib.")
-    parser.add_argument("--cmap", default="hsv", help="Colormap Name. Use --show-color-map show all names.")
+    parser.add_argument("--cmap", default="hsv", help="Colormap Name. Use --show-all-cmaps show all names.")
     parser.add_argument("--show-all-cmaps", action=_EarlyStopAction, stop=get_colormap_info(),
                         help="Show all color-map names then exit.")
     parser.add_argument("--rows", type=int, help="Number rows in an image (Matplotlib only).")

@@ -201,7 +201,7 @@ class Generator:
         self.crop_size = 1296 if not crop_size else max(100, min(1296, int(crop_size)))
         self.mem_type = MemoryType.CUDA_UNIFIED if not memory_type else max(0, min(3, int(memory_type)))
 
-        # Initialization of workers that save img-bytes and lbl-bytes
+        # Initialize workers that save img-bytes and lbl-bytes
         self.num_workers = 1 if not num_workers else max(1, min(os.cpu_count() - 1, int(num_workers)))
         self.buffer = Queue()
         self.workers: List[_GeneratorDaemon] = []

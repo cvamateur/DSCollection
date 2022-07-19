@@ -100,6 +100,7 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
 
     def convert(self, ds: Dataset) -> List[LabelInfo]:
         results: List[Union[LabelInfo, None]] = [None] * len(ds.labels)
+        self._last_n = 0
 
         futures = []
         with ProcessPoolExecutor(self.n_workers) as executor:

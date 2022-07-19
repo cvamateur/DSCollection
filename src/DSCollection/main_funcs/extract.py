@@ -19,6 +19,7 @@ def main(args):
         if DataKlass is None:
             msg = "Unknown dataset: %s" % input_root
             raise RuntimeError(msg)
+
         if args.kwargs is not None:
             # Make sure kwargs not contain split and year
             split = args.kwargs.pop("split", args.split)

@@ -68,8 +68,10 @@ class DataExtractor:
                     dstImg = os.path.join(dstImgDir, nameFmt.format(info.index, f".{ext}"))
                     dstLbl = os.path.join(dstLblDir, nameFmt.format(info.index, self.cvt.lblExt))
                 else:
-                    dstImg = os.path.join(dstImgDir, info.imgName)
-                    dstLbl = os.path.join(dstLblDir, info.imgName.split('.')[0] + self.cvt.lblExt)
+                    # make sure imgName is not a subdirectory structure
+                    imgName = info.imgName.replace('/', '-')
+                    dstImg = os.path.join(dstImgDir, imgName)
+                    dstLbl = os.path.join(dstLblDir, imgName.split('.')[0] + self.cvt.lblExt)
                 future = executor.submit(self._save_to_dst, srcImg, dstImg, info.data, dstLbl)
                 futures.append(future)
 
