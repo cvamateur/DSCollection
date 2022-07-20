@@ -3,15 +3,15 @@
 # @Site    : 
 # @File    : augmentation.py
 # @Software: PyCharm
-from ..core.augmentation import Augmentation, Invoker, Rotate, Save
+from ..core.augment import Augmentation, Invoker, Rotate, Save
 from ..core.dataset import Dataset, KITTI
 from ..utils.common import check_path
 from ..utils.tasks import TaskDispatcher, TASK
 
 
-@TaskDispatcher(task=TASK.AUGMENTATION)
+@TaskDispatcher(task=TASK.AUGMENT)
 def main(args):
-    aug = Augmentation(args.output, args.name, args.dtype, args.contiguous)
+    aug = Augmentation(args.output, args.dtype, args.contiguous)
     invoker = Invoker()
 
     if args.rotate != 0:

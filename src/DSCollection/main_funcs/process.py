@@ -9,5 +9,5 @@ from ..core.process import Process
 
 @TaskDispatcher(TASK.PROCESS)
 def main(args):
-    p = Process(args.input, dst_dtype=args.dtype, output=args.output, name=args.name, force=args.force)
+    p = Process(args.input, dst_dtype=args.dtype, output=args.output, force=args.force)
     p.run(args)

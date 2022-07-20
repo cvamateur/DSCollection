@@ -29,18 +29,16 @@ MAX_WORKER = 5
 
 class Process:
 
-    def __init__(self, inputs: List[str], dst_dtype: str, output: str, name: str = "Merged",
-                 force: bool = False):
-        self.output = path_join(output, name)
+    def __init__(self, inputs: List[str], dst_dtype: str, output: str, force: bool = False):
+        self.output = output
         if os.path.exists(self.output):
             if force:
                 shutil.rmtree(self.output)
             else:
                 raise FileExistsError("Output dataset already exist.")
 
-        self.output_dst = Dataset.from_type(dst_dtype)(output)
-        self.output_dst.create_structure(output, name)
         self.convertor = Convertor.from_type(dst_dtype)
+        self.convertor.create_dataset(*os.path.split(output))
 
         self.datasets = []
         for path in inputs:
@@ -81,6 +79,8 @@ class Process:
             if len(res) == size:
                 yield res
                 res.clear()
+        else:
+            yield res
 
         yield res
 
@@ -127,7 +127,7 @@ class Process:
         return dx, dy
 
     @staticmethod
-    def roi_crop(crop_size: int, tw: int, th: int, offset: int):
+    def _center_crop(img_size, tw: int, th: int):
         """
         Return coordinates of the largest ROI in `crop_size` region,
         whose aspect ratio is same as tw/th.
@@ -135,30 +135,56 @@ class Process:
         NOTE:
             The coordinates are relative to center cropped region.
 
-        :param crop_size: Size of center cropped region.
+        :param img_size: Size of image size.
         :param tw: Width of a region whose aspect is same as the final ROI's
         :param th: Height of a region whose aspect is same as the final ROI's
-        :param offset: A small offset
         :return:
         """
-        if tw >= th:
-            nh = int(th / tw * crop_size)
-            delta = (crop_size - nh) // 2
-            offset = max(min(delta, offset), -delta)
-            x1 = 0
-            y1 = delta + offset
-            x2 = crop_size
-            y2 = y1 + nh
-        else:
-            nw = int(tw / th * crop_size)
-            delta = (crop_size - nw) // 2
-            offset = max(min(delta, offset), -delta)
-            x1 = delta + offset
+        ih, iw = img_size
+        scale_h, scale_w = th / ih, tw / iw
+        if scale_h > scale_w:
+            nw = int(tw / scale_h)
+            delta = (iw - nw) // 2
+            x1 = delta
             y1 = 0
-            x2 = x1 + nw
-            y2 = crop_size
+            x2 = delta + nw
+            y2 = ih
+        else:
+            nh = int(th / scale_w)
+            delta = (ih - nh) // 2
+            x1 = 0
+            y1 = delta
+            x2 = iw
+            y2 = delta + nh
 
         return x1, y1, x2, y2
+
+    @staticmethod
+    def _tri_cut(cx1, cy1, cx2, cy2, iw: int, ih: int):
+        tw, th = cx2 - cx1, cy2 - cy1
+        s = set()
+        s.add((cx1, cy1, cx2, cy2))
+        if tw < iw:
+            s.add((0, 0, tw, th))
+            s.add((iw - tw, 0, iw, ih))
+        if th < ih:
+            s.add((0, 0, tw, th))
+            s.add((0, ih - th, iw, ih))
+
+        return s
+
+    @classmethod
+    def roi_crop(cls, img_size: Tuple[int, int], tw: int, th: int, crop_mode: int):
+        ih, iw = img_size
+        cx1, cy1, cx2, cy2 = cls._center_crop(img_size, tw, th)
+        if crop_mode == 1:
+            return [(cx1, cy1, cx2, cy2)]
+        elif crop_mode == 3:
+            return cls._tri_cut(cx1, cy1, cx2, cy2, iw, ih)
+        elif crop_mode == 5:
+            ...
+        else:
+            raise NotImplementedError("crop-mode: %d", crop_mode)
 
     @staticmethod
     def show(img_array: np.ndarray):
@@ -289,16 +315,17 @@ class Process:
                 img_name = "{:06}{}".format(self._count, ".png")
                 lab_name = "{:06}{}".format(self._count, ".txt")
 
-            img_path = path_join(self.output, self.output_dst.imgDirName, img_name)
-            lbl_path = path_join(self.output, self.output_dst.lblDirName, lab_name)
+            img_path = path_join(self.output, self.convertor.imgDirName, img_name)
+            lbl_path = path_join(self.output, self.convertor.lblDirName, lab_name)
 
             futures.append(self.pro_executor.submit(self._save, self.convertor, img_path, lbl_path, img, lbl, ow, oh))
             self._count += 1
 
     def run(self, args):
-        width, height = map(int, args.output_size)
+        height, width = map(int, args.output_size)
         crop_size = args.crop_size
-        offset = args.roi_offset
+        crop_mode = args.crop_mode
+        crop_ratio = args.crop_ratio
 
         process_bar = tqdm(desc="Process")
         process_bar.total = self.total_input
@@ -307,37 +334,41 @@ class Process:
         for img_data, labels in self.load():
             batch_data = np.asarray(img_data)
             h, w = batch_data.shape[1:-1]
-            dx, dy = self.center_crop(w, h, crop_size)
-            x1, y1, x2, y2 = self.roi_crop(crop_size, width, height, offset)
-            batch_data = batch_data[:, y1 + dy:y2 + dy, x1 + dx:x2 + dx, :]
+            dx, dy = self.center_crop(w, h, crop_size) if crop_size is not None else (0, 0)
+            if dx == 0 and dy == 0:
+                rois = self.roi_crop((h, w), tw=width, th=height, crop_mode=crop_mode)
+            else:
+                rois = self.roi_crop((crop_size, crop_size), width, height, crop_mode)
 
-            roi = (x1 + dx, y1 + dy, x2 + dx, y2 + dy)
-            processed_labels = []
-            for i, lbl in enumerate(labels):
-                keeps, skips = self.process_label(lbl, roi,
-                                                  min_area=args.min_area,
-                                                  max_ratio=args.max_ratio,
-                                                  min_ratio=args.min_ratio,
-                                                  scale=height / (roi[3] - roi[1]))
-                lbl.boxes = keeps
-                if args.show:
-                    img = batch_data[i, ...].copy()
-                    img = cv2.resize(img, (width, height), interpolation=cv2.INTER_CUBIC)
-                    img = self.annotate_image(img, keeps)
+            for (x1, y1, x2, y2) in rois:
+                _batch_data = batch_data[:, dy + y1:dy + y2, dx + x1:dx + x2, :]
 
-                    for sk_lbl in skips:
-                        pt1 = int(sk_lbl.left), int(sk_lbl.top)
-                        pt2 = int(sk_lbl.right), int(sk_lbl.bottom)
-                        self.dotted_line(img, pt1, pt2, (0, 200, 0), 2)
-                    self.show(img)
+                roi = (x1 + dx, y1 + dy, x2 + dx, y2 + dy)
+                processed_labels = []
+                for i, lbl in enumerate(labels):
+                    keeps, skips = self.process_label(lbl, roi,
+                                                      min_area=args.min_area,
+                                                      max_ratio=args.max_ratio,
+                                                      min_ratio=args.min_ratio,
+                                                      scale=height / (roi[3] - roi[1]))
+                    _lbl = ImageLabel(lbl.fileName, keeps, lbl.width, lbl.height, lbl.depth)
+                    if args.show:
+                        img = _batch_data[i, ...].copy()
+                        img = cv2.resize(img, (width, height), interpolation=cv2.INTER_CUBIC)
+                        img = self.annotate_image(img, keeps)
 
-                processed_labels.append(lbl)
+                        for sk_lbl in skips:
+                            pt1 = int(sk_lbl.left), int(sk_lbl.top)
+                            pt2 = int(sk_lbl.right), int(sk_lbl.bottom)
+                            self.dotted_line(img, pt1, pt2, (0, 200, 0), 2)
 
-            if self.output_dst is not None:
-                img_data = list(batch_data[:, ])
-                self.save(img_data, processed_labels, args.contiguous, width, height)
+                        self.show(img)
+
+                    processed_labels.append(_lbl)
+
+                if self.output is not None:
+                    img_data = list(_batch_data[:, ])
+                    self.save(img_data, processed_labels, args.contiguous, width, height)
 
             if self.current_dataset_index - crt_process == 1:
                 process_bar.update()
-
-

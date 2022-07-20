@@ -33,7 +33,7 @@ class TASK:
     COMBINE = "combine"
     SPLIT = "split"
     PROCESS = "process"
-    AUGMENTATION = "augmentation"
+    AUGMENT = "augment"
 
     @classmethod
     def list_all(cls) -> List[str]:

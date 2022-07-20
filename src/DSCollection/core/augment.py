@@ -68,12 +68,12 @@ class Save(Command):
 class Augmentation:
     """Receiver"""
 
-    def __init__(self, output: str, name: str, dst_dtype: str, contiguous: bool):
-        self.output = path_join(output, name)
+    def __init__(self, output: str, dst_dtype: str, contiguous: bool):
+        self.output = output
         assert not os.path.exists(self.output), "Output dataset already exist."
 
         self.output_dst = Dataset.from_type(dst_dtype)(output)
-        self.output_dst.create_structure(output, name)
+        self.output_dst.create_structure(*os.path.split(self.output))
         self.convertor = Convertor.from_type(dst_dtype)
         self.contiguous = contiguous
 
