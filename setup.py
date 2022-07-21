@@ -24,9 +24,9 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=[
-        "tqdm ~= 4.64.0",
-        "pycocotools ~= 2.0.4",
-        "pandas ~= 1.4.3",
+        "tqdm >= 4.5.0",
+        "pycocotools >= 2.0.2",
+        "pandas >= 1.3.0",
         "numpy >= 1.17.0",
-        "matplotlib ~= 3.5.1"],
+        "matplotlib >= 3.3.0"],
 )

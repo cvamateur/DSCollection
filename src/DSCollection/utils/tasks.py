@@ -19,13 +19,13 @@ class TASK:
 
     5. split:
         Split a dataset into multiple partitions, only images and labels are moved to
-        partitions.
+        new partitions.
 
     6. process:
         Pre-process a dataset as required.
 
-    7. augmentation:
-        Augmentate dataset.
+    7. augment:
+        Augment dataset.
     """
     EXTRACT = "extract"
     GENERATE = "generate"
@@ -37,7 +37,7 @@ class TASK:
 
     @classmethod
     def list_all(cls) -> List[str]:
-        return [cls.EXTRACT, cls.GENERATE, cls.VISUALIZE, cls.COMBINE, cls.SPLIT, cls.PROCESS, cls.AUGMENTATION]
+        return [cls.EXTRACT, cls.GENERATE, cls.VISUALIZE, cls.COMBINE, cls.SPLIT, cls.PROCESS, cls.AUGMENT]
 
 
 class TaskDispatcher:
