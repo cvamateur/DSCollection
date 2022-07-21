@@ -79,10 +79,8 @@ class Process:
             if len(res) == size:
                 yield res
                 res.clear()
-        else:
+        if res:
             yield res
-
-        yield res
 
     @classmethod
     def _wait_completed(cls, fs):
@@ -95,22 +93,22 @@ class Process:
             self.current_dataset_index += 1
             dataset.load(skip_empty=False)
             iter_labels = self._chunkify(CHUNK_SIZE, dataset.labels)
-            labels = next(iter_labels)
-            pre_data = self.read_image(labels, dataset.root, dataset.imgDirName)
-            if len(pre_data) == 0:
+            try:
+                labels = next(iter_labels)
+            except StopIteration:
                 continue
+            pre_data = self.read_image(labels, dataset.root, dataset.imgDirName)
 
             while True:
                 self._wait_completed(pre_data)
-                labels = next(iter_labels)
+                try:
+                    labels = next(iter_labels)
+                except StopIteration:
+                    yield [f.result() for f in pre_data.keys()], [l for l in pre_data.values()]
+                    break
                 next_data = self.read_image(labels, dataset.root, dataset.imgDirName)
                 yield [f.result() for f in pre_data.keys()], [l for l in pre_data.values()]
                 pre_data, next_data = next_data, None
-
-                if len(pre_data) < CHUNK_SIZE:
-                    self._wait_completed(pre_data)
-                    yield [f.result() for f in pre_data.keys()], [l for l in pre_data.values()]
-                    break
 
     @staticmethod
     def center_crop(w: int, h: int, crop_size: int):
@@ -127,7 +125,7 @@ class Process:
         return dx, dy
 
     @staticmethod
-    def _center_crop(img_size, tw: int, th: int):
+    def _center_crop(img_size, tw: int, th: int, crop_ratio: float):
         """
         Return coordinates of the largest ROI in `crop_size` region,
         whose aspect ratio is same as tw/th.
@@ -157,7 +155,9 @@ class Process:
             x2 = iw
             y2 = delta + nh
 
-        return x1, y1, x2, y2
+        dx, dy = int((x2 - x1) * (1.0 - crop_ratio)), int((y2 - y1) * (1.0 - crop_ratio))
+
+        return x1 + dx, y1 + dy, x2 - dx, y2 - dy
 
     @staticmethod
     def _tri_cut(cx1, cy1, cx2, cy2, iw: int, ih: int):
@@ -173,16 +173,28 @@ class Process:
 
         return s
 
+    @staticmethod
+    def _five_cut(cx1, cy1, cx2, cy2, iw: int, ih: int):
+        tw, th = cx2 - cx1, cy2 - cy1
+        s = set()
+        s.add((0, 0, tw, th))
+        s.add((iw - tw, 0, iw, th))
+        s.add((cx1, cy1, cx2, cy2))
+        s.add((0, ih - th, tw, ih))
+        s.add((iw - tw, ih - th, iw, ih))
+
+        return s
+
     @classmethod
-    def roi_crop(cls, img_size: Tuple[int, int], tw: int, th: int, crop_mode: int):
+    def roi_crop(cls, img_size: Tuple[int, int], tw: int, th: int, crop_mode: int, crop_ratio: float):
         ih, iw = img_size
-        cx1, cy1, cx2, cy2 = cls._center_crop(img_size, tw, th)
+        cx1, cy1, cx2, cy2 = cls._center_crop(img_size, tw, th, crop_ratio)
         if crop_mode == 1:
             return [(cx1, cy1, cx2, cy2)]
         elif crop_mode == 3:
             return cls._tri_cut(cx1, cy1, cx2, cy2, iw, ih)
         elif crop_mode == 5:
-            ...
+            return cls._five_cut(cx1, cy1, cx2, cy2, iw, ih)
         else:
             raise NotImplementedError("crop-mode: %d", crop_mode)
 
@@ -326,6 +338,7 @@ class Process:
         crop_size = args.crop_size
         crop_mode = args.crop_mode
         crop_ratio = args.crop_ratio
+        crop_ratio = min(max(0.0, crop_ratio), 1.0)
 
         process_bar = tqdm(desc="Process")
         process_bar.total = self.total_input
@@ -336,9 +349,9 @@ class Process:
             h, w = batch_data.shape[1:-1]
             dx, dy = self.center_crop(w, h, crop_size) if crop_size is not None else (0, 0)
             if dx == 0 and dy == 0:
-                rois = self.roi_crop((h, w), tw=width, th=height, crop_mode=crop_mode)
+                rois = self.roi_crop((h, w), tw=width, th=height, crop_mode=crop_mode, crop_ratio=crop_ratio)
             else:
-                rois = self.roi_crop((crop_size, crop_size), width, height, crop_mode)
+                rois = self.roi_crop((crop_size, crop_size), width, height, crop_mode, crop_ratio=crop_ratio)
 
             for (x1, y1, x2, y2) in rois:
                 _batch_data = batch_data[:, dy + y1:dy + y2, dx + x1:dx + x2, :]
