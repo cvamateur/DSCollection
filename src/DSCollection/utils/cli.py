@@ -240,7 +240,7 @@ def add_combine_task_argument(parser: ArgumentParser):
 
 def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("--output-size", action=_XSepAction,
-                        help=f"Size of the final image (HxW; separated by 'x'.")
+                        help=f"Size of the final image (WxH; separated by 'x'.")
     parser.add_argument("-s", "--show", action="store_true", help="Whether show the annotated image.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Report dropped images.")
     parser.add_argument("-f", "--force", action="store_true",
@@ -250,7 +250,7 @@ def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("--c1", dest="crop_mode", action="store_const", const=1, help="The number of cropped images.")
     parser.add_argument("--c3", dest="crop_mode", action="store_const", const=3, help="The number of cropped images.")
     parser.add_argument("--c5", dest="crop_mode", action="store_const", const=5, help="The number of cropped images.")
-    parser.add_argument("--crop-ratio", type=float, default=0.0, help="The ratio of the cropped image.")
+    parser.add_argument("--crop-ratio", type=float, default=1.0, help="The ratio of the cropped image.")
 
     parser.add_argument("--min-area", type=int, default=25 * 25, help="Minimum area that object will be ignored.")
     parser.add_argument("--min-ratio", type=float, default=0.36, help="Minimum w/h ratio that object will be ignored.")
