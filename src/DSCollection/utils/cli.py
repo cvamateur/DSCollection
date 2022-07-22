@@ -235,7 +235,7 @@ def add_split_task_argument(parser: ArgumentParser):
 
 
 def add_combine_task_argument(parser: ArgumentParser):
-    parser.add_argument("--drop", action="store_true", help="Keep original dataset.")
+    parser.add_argument("--drop", action="store_true", help="Whether delete original dataset.")
 
 
 def add_process_task_arguments(parser: ArgumentParser):

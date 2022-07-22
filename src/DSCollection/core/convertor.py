@@ -14,7 +14,7 @@ from .dataset import Dataset, DatasetType, ImageLabel
 @dataclasses.dataclass(frozen=True, repr=False, eq=False)
 class LabelInfo:
     """
-    Structure holding information about a hold annotation file.
+    Structure holding annotation information.
 
     A convertor usually iterate every `ImageLabel` loaded by `Dataset`,
     and convert to a list of `LabelInfo`.
@@ -100,7 +100,6 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
 
     def convert(self, ds: Dataset) -> List[LabelInfo]:
         results: List[Union[LabelInfo, None]] = [None] * len(ds.labels)
-        self._last_n = 0
 
         futures = []
         with ProcessPoolExecutor(self.n_workers) as executor:
@@ -110,7 +109,7 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
 
             for future in tqdm(as_completed(futures), total=len(futures), desc="Convert dataset"):
                 lblInfo: LabelInfo = future.result()
-                results[lblInfo.index] = lblInfo
+                results[lblInfo.index - self._last_n] = lblInfo
 
         self._last_n += len(ds.labels)
         return results

@@ -194,6 +194,7 @@ class Generator:
         self.streammux: Gst.Element
         self.probe_func: Callable
         self.state: Gst.State = None
+
         self.skip_mode = 0 if not skip_mode else max(0, min(2, int(skip_mode)))
         self.interval = 0 if not interval else max(0, int(interval))
         self.gpu_id = 0 if not gpu_id else max(0, int(gpu_id))
@@ -287,7 +288,7 @@ class Generator:
                 return InputType.IMAGE, [os.path.join(path, fn) for fn in fnames]
             # Check path mix videos and images
             if len(videos) and len(images):
-                msg = "error: path mixture videos and image are not allowed\n"
+                msg = "error: path mixture videos and images are not allowed\n"
                 raise RuntimeError(msg)
 
         return InputType.UNKNOWN, []
