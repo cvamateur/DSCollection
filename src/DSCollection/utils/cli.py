@@ -255,6 +255,7 @@ def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("--min-area", type=int, default=25 * 25, help="Minimum area that object will be ignored.")
     parser.add_argument("--min-ratio", type=float, default=0.36, help="Minimum w/h ratio that object will be ignored.")
     parser.add_argument("--max-ratio", type=float, default=2.0, help="Maximum w/h ratio that object will be ignored.")
+    parser.add_argument("--keep-empty-label", action="store_true", help="Whether to keep label if it's empty.")
 
     return parser
 

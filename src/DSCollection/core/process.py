@@ -4,6 +4,7 @@
 # @File    : process.py
 # @Software: PyCharm
 import logging
+import math
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, Future, ProcessPoolExecutor
@@ -158,6 +159,17 @@ class Process:
         return x1, y1, x2, y2
 
     @staticmethod
+    def _percent_crop2(img_size, tw: int, th: int, crop_ratio: float):
+        ih, iw = img_size
+        a = tw / th
+        crop_w = math.sqrt(ih * iw * crop_ratio * a)
+        crop_h = crop_w / a
+        cx, cy = iw / 2, ih / 2
+        dw, dh = crop_w // 2, crop_h // 2
+        x1, y1, x2, y2 = int(cx - dw), int(cy - dh), int(cx + dw), int(cy + dh)
+        return x1, y1, x2, y2
+
+    @staticmethod
     def _tri_cut(cx1, cy1, cx2, cy2, iw: int, ih: int):
         tw, th = cx2 - cx1, cy2 - cy1
         s = set()
@@ -192,8 +204,7 @@ class Process:
         elif crop_mode == 3:
             return cls._tri_cut(cx1, cy1, cx2, cy2, iw, ih)
         elif crop_mode == 5:
-            dx, dy = int((cx2 - cx1) // 2 * (1.0 - crop_ratio)), int((cy2 - cy1) // 2 * (1.0 - crop_ratio))
-            cx1, cy1, cx2, cy2 = cx1 + dx, cy1 + dy, cx2 - dx, cy2 - dy
+            cx1, cy1, cx2, cy2 = cls._percent_crop2(img_size, tw, th, crop_ratio)
             return cls._five_cut(cx1, cy1, cx2, cy2, iw, ih)
         else:
             raise NotImplementedError("crop-mode: %d", crop_mode)
@@ -317,7 +328,8 @@ class Process:
         with open(lbl_path, 'wb') as f:
             f.write(label_info.data)
 
-    def save(self, img_data: List[np.ndarray], labels: List[ImageLabel], contiguous: bool, ow: int, oh: int):
+    def save(self, img_data: List[np.ndarray], labels: List[ImageLabel], contiguous: bool, ow: int, oh: int,
+             keep_emp_lbl: bool):
         futures = []
         for img, lbl in zip(img_data, labels):
             if contiguous:
@@ -326,6 +338,9 @@ class Process:
             else:
                 img_name = "{:06}{}".format(self._count, ".png")
                 lab_name = "{:06}{}".format(self._count, ".txt")
+
+            if keep_emp_lbl and len(lbl.boxes) == 0:
+                continue
 
             img_path = path_join(self.output, self.convertor.imgDirName, img_name)
             lbl_path = path_join(self.output, self.convertor.lblDirName, lab_name)
@@ -338,7 +353,8 @@ class Process:
         crop_size = args.crop_size
         crop_mode = args.crop_mode
         crop_ratio = args.crop_ratio
-        crop_ratio = min(max(0.0, crop_ratio), 1.0)
+        crop_ratio = min(max(0.001, crop_ratio), 0.99)
+        keep_emp_lbl = args.keep_empty_label
 
         process_bar = tqdm(desc="Process", total=self.total_input)
         crt_process = 0
@@ -380,7 +396,7 @@ class Process:
 
                 if self.output is not None:
                     img_data = list(_batch_data[:, ])
-                    self.save(img_data, processed_labels, args.contiguous, width, height)
+                    self.save(img_data, processed_labels, args.contiguous, width, height, keep_emp_lbl)
 
             if self.current_dataset_index - crt_process == 1:
                 process_bar.update()
