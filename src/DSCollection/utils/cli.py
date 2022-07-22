@@ -246,13 +246,11 @@ def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("-f", "--force", action="store_true",
                         help="Delete exist output directory, regenernate dataset.")
     parser.add_argument("--crop-size", type=int, help="Center crop size (default: 1296).")
-    # parser.add_argument("--roi-offset", type=int, default=0, help="Offset of roi cropping (default: 0).")
 
     parser.add_argument("--c1", dest="crop_mode", action="store_const", const=1, help="The number of cropped images.")
     parser.add_argument("--c3", dest="crop_mode", action="store_const", const=3, help="The number of cropped images.")
     parser.add_argument("--c5", dest="crop_mode", action="store_const", const=5, help="The number of cropped images.")
-    # parser.add_argument("--c", dest="store_const", type=int, help="The number of cropped images.")
-    parser.add_argument("--crop-ratio", type=float, default=0.75, help="The ratio of the cropped image.")
+    parser.add_argument("--crop-ratio", type=float, default=0.0, help="The ratio of the cropped image.")
 
     parser.add_argument("--min-area", type=int, default=25 * 25, help="Minimum area that object will be ignored.")
     parser.add_argument("--min-ratio", type=float, default=0.36, help="Minimum w/h ratio that object will be ignored.")
