@@ -125,7 +125,7 @@ class Process:
         return dx, dy
 
     @staticmethod
-    def _center_crop(img_size, tw: int, th: int, crop_ratio: float):
+    def _center_crop(img_size, tw: int, th: int):
         """
         Return coordinates of the largest ROI in `crop_size` region,
         whose aspect ratio is same as tw/th.
@@ -155,9 +155,7 @@ class Process:
             x2 = iw
             y2 = delta + nh
 
-        dx, dy = int((x2 - x1) * (1.0 - crop_ratio)), int((y2 - y1) * (1.0 - crop_ratio))
-
-        return x1 + dx, y1 + dy, x2 - dx, y2 - dy
+        return x1, y1, x2, y2
 
     @staticmethod
     def _tri_cut(cx1, cy1, cx2, cy2, iw: int, ih: int):
@@ -188,12 +186,14 @@ class Process:
     @classmethod
     def roi_crop(cls, img_size: Tuple[int, int], tw: int, th: int, crop_mode: int, crop_ratio: float):
         ih, iw = img_size
-        cx1, cy1, cx2, cy2 = cls._center_crop(img_size, tw, th, crop_ratio)
+        cx1, cy1, cx2, cy2 = cls._center_crop(img_size, tw, th)
         if crop_mode == 1:
             return [(cx1, cy1, cx2, cy2)]
         elif crop_mode == 3:
             return cls._tri_cut(cx1, cy1, cx2, cy2, iw, ih)
         elif crop_mode == 5:
+            dx, dy = int((cx2 - cx1) // 2 * (1.0 - crop_ratio)), int((cy2 - cy1) // 2 * (1.0 - crop_ratio))
+            cx1, cy1, cx2, cy2 = cx1 + dx, cy1 + dy, cx2 - dx, cy2 - dy
             return cls._five_cut(cx1, cy1, cx2, cy2, iw, ih)
         else:
             raise NotImplementedError("crop-mode: %d", crop_mode)
@@ -334,14 +334,13 @@ class Process:
             self._count += 1
 
     def run(self, args):
-        height, width = map(int, args.output_size)
+        width, height = map(int, args.output_size)
         crop_size = args.crop_size
         crop_mode = args.crop_mode
         crop_ratio = args.crop_ratio
         crop_ratio = min(max(0.0, crop_ratio), 1.0)
 
-        process_bar = tqdm(desc="Process")
-        process_bar.total = self.total_input
+        process_bar = tqdm(desc="Process", total=self.total_input)
         crt_process = 0
 
         for img_data, labels in self.load():
