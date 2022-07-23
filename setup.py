@@ -14,7 +14,7 @@ setup(
     author="Chris LIU, Shiboy",
     author_email="chris.lq@hotmail.com",
     url="https://github.com/cvamateur/DSCollection",
-    version="1.0.0",  # 0.0.x imply is unstable
+    version="1.0.1",  # 0.0.x imply is unstable
     description="A collection of tools ease dataset manipulation",
     scripts=["bin/dsc"],
     packages=find_packages("src"),  # a list of actual python packages

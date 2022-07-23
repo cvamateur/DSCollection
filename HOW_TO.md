@@ -12,6 +12,9 @@ pip3 install --upgrade twine
 # generate distribution archives 
 python3 -m build
 
+# check 
+twine check dist/*
+
 # upload distributions to testpypi
 twine upload --repository testpypi dist/*
 ```

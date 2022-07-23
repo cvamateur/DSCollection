@@ -7,7 +7,8 @@ _A collection of tools ease manipulations of datasets._
 Choose one of the two types of DSCollection packages to install:
 - `python3 -m pip install dscollection`
   - This is the standard version of *DSCollecton* which contains all tasks except **generate**.
-  - The standard version has fewer dependencies thus is a perfect entry for quick start.
+  - The standard version has fewer dependencies thus it's a perfect start point for mostly functionality.
+  
 - `python3 -m pip install dscollection[gst]`
   - This is the full-fledged version od *DSCollection* contains all tasks.
   - You need correctly install **Gst-Python** (python bingding of Gstreamer) and **pyds** (Python binding of DeepStream) 
@@ -111,14 +112,14 @@ For users who installed `dscollection[gst]`, go over the sections below.
 
 ### 2. Install DSCollection
 
+Currently, DSCollection is under development, thus we only uploaded on [TestPyPI](https://test.pypi.org/project/dscollection/). 
+You can install the unstable package right now using pip:
+```shell
+pip install --upgrade -i https://test.pypi.org/simple dscollection
+```
+---
 
-
-
-
-> NOTE: DSCollection already uploaded to [TestPyPI](https://test.pypi.org/project/dscollection/).
-
-
-### Task description:
+## Task description:
 
 #### 1. **extract**:
 Extract some or all classes from dataset, generate a new dataset.
