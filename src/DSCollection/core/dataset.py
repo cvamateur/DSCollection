@@ -556,7 +556,7 @@ class HT21(Dataset, dtype="ht21"):
     imgDirName = ""
     lblDirName = ""
 
-    def __init__(self, root: str, *_, split: str = "train", conf: float = 60.0, **__):
+    def __init__(self, root: str, *_, split: str = "train", conf: float = 40.0, **__):
         assert split in self.SPLITS, f"split must be one of {self.SPLITS}"
         super(HT21, self).__init__(os.path.join(root, split), *_, **__)
         self.conf = float(conf)
