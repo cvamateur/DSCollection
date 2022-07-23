@@ -1,7 +1,12 @@
-from setuptools import setup, find_packages
+import os
+import platform
+import subprocess
 
-with open("README.md", 'r') as f:
-    long_description = f.read()
+from setuptools import setup
+from setuptools import find_packages
+from setuptools import Extension
+from setuptools.command.build_ext import build_ext
+
 
 setup(
     # name what to pip install, different from module name to import from code
@@ -21,12 +26,19 @@ setup(
         "Programming Language :: Python :: 3.8",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent"],
-    long_description=long_description,
+    long_description=open("README.md", 'r').read(),
     long_description_content_type="text/markdown",
     install_requires=[
         "tqdm >= 4.5.0",
         "pycocotools >= 2.0.2",
         "pandas >= 1.3.0",
         "numpy >= 1.17.0",
-        "matplotlib >= 3.3.0"],
+        "matplotlib >= 3.3.0",
+    ],
+    extras_requires={
+        "gst": [
+            "pycairo >= 1.16.3",
+            "PyGObject >= 3.32.0",
+        ]
+    }
 )
