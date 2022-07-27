@@ -5,7 +5,7 @@ from functools import partial
 
 from .tasks import TASK
 from ..core.dataset import DatasetType
-from ..main_funcs import __version__ as v
+from ..version import __version__ as v
 from ..main_funcs.visualize import get_colormap_info
 
 OPTSEP = ','

@@ -4,33 +4,122 @@ _A collection of tools ease manipulations of datasets._
 
 ## Installation 
 
-### 1. Build binary wheel and install locally
+Choose one of the two types of DSCollection packages to install:
+- `python3 -m pip install dscollection`
+  - This is the standard version of *DSCollecton* which contains all tasks except **generate**.
+  - The standard version has fewer dependencies thus it's a perfect start point for mostly functionality.
+  
+- `python3 -m pip install dscollection[gst]`
+  - This is the full-fledged version od *DSCollection* contains all tasks.
+  - You need correctly install **Gst-Python** (python bingding of Gstreamer) and **pyds** (Python binding of DeepStream) 
+    in order to use **generate** task.
+  - **To install pyds, you need at least one GPU card.**
+
+### 1. Installation dependencies
+DSCollection heavily relies on `opencv-python`. Since users may have their own opencv installed, therefore after installing 
+the package, you may need install opencv yourself if it does not exist.
+
+For users who installed `dscollection[gst]`, go over the sections below.
+
+**Prerequisite**:
+- At least 1 NVIDIA GPU card;
+- CUDA ToolKit, CuDNN and TensorRT have already installed.
+
+> **TIP:**
+>If you have trouble to install the prerequisites, I wrote a [blog](https://blog.csdn.net/qq_27370437/article/details/124945605?spm=1001.2014.3001.5501) that may save your time.
+
+#### Install gst-python and pyds
+
+- Ubuntu 20.04 LTS
+  - Refer to deepstream [official site](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_Quickstart.html#remove-all-previous-deepstream-installations) 
+  and deepstream python github [link](https://github.com/NVIDIA-AI-IOT/deepstream_python_apps/blob/master/HOWTO.md) 
+
+- Ubuntu 22.04 LTS
+  - Since the version of Gstreamer in Ubuntu 22.04 LTS is **1.20.1** by default, you need install the corresponding gst-python at first.
+  - Download [gst-python-1.20.1](https://gstreamer.freedesktop.org/src/gst-python/gst-python-1.20.1.tar.xz)
+  - Install gst-python-1.20.1
+    - ```shell
+      # install meson and ninja 
+      sudo apt install meson ninja-build
+      
+      # build gst-python
+      cd ~/Downloads/gst-python-1.20.1
+      meson builddir && cd builddir
+      ninja
+      
+      # copy gst-python dynamic library to gi/overrides
+      GI_OVERRIDES_PATH=$($(which python) -c 'import gi; import os; print(os.path.join(os.path.dirname(gi.__file__), "overrides"))')
+      cp ./gi/overrides/* $GI_OVERRIDES_PATH
+      ```
+- Install [deepstream sdk site](https://docs.nvidia.com/metropolis/deepstream/dev-guide/text/DS_Quickstart.html#remove-all-previous-deepstream-installations)
+- Install libyaml-cpp0.6
+  - ```shell
+    # uninstall libyaml-cpp0.7
+    sudo apt purge libyaml-cpp-dev
+      
+    # Install libyaml-cpp0.6
+    cd ~/Downloads
+    git clone https://github.com/jbeder/yaml-cpp.git
+    cd yaml-cpp
+    git checkout tags/yaml-cpp-0.6.3
+      
+    mkdir build && cd build
+    cmake -DYAML_BUILD_SHARED_LIBS=ON ..
+    make
+    sudo make install
+      
+    # create a soft link under /usr/lib
+    sudo ln -s /usr/local/lib/libyaml-cpp.so.0.6.3 /usr/lib/libyaml-cpp.so.0.6
+    ```
+- Install [deepstream-python-bingdings](https://github.com/NVIDIA-AI-IOT/deepstream_python_apps/blob/master/bindings/README.md), go to section 1.3 directly:
+  - ```shell
+    # download deepstream-python
+    cd ~/Downloads
+    git clone https://github.com/NVIDIA-AI-IOT/deepstream_python_apps.git
+    cd deepstream_python_apps
+    git checkout tags/v1.1.3
+    git submodule update --init
+    
+    # add the new certificates that gst-python git server now uses
+    sudo apt-get install -y apt-transport-https ca-certificates -y
+    sudo update-ca-certificates
+    
+    # IMPORTANT: Since the built-in python3 version in Ubuntu 22.04 is 3.10, 
+    # but deepstream only supports python3.8, therefore you must create a 
+    # virtual environment with python=3.8
+    conda create -n deepstream python=3.8
+    conda activate deepstream
+    
+    # IMPORTANT: Edit CMakeList.txt to let pybind11 find <Python.h>
+    # Add a new line `~/miniconda3/envs/deepstream/include/python3.8` at include_directories
+    # Probably at line 71!
+    
+    # IMPORTANT: Edit CMakeList.txt to let pyds to link python3.8 library
+    # Add a new line `target_link_directories(pyds PRIVATE ~/miniconda3/envs/deepstream/lib)`
+    # at line 88 (right beofore target_link_libraries(pyds pthread ...) )
+    
+    # Install deepstream bindings
+    cd bindings
+    mkdir build && cd build
+    cmake -DPYTHON_MINOR_VERSION=8 ..
+    make -j$(nproc)
+    
+    # Now you have successfully built pyds-1.1.3*.whl
+    # Install pyds, make sure you have activated correctly virtual environment
+    pip install pyds-1.1.3-py3-none-linux_x86_64.whl
+    ```
+    
+
+### 2. Install DSCollection
+
+Currently, DSCollection is under development, thus we only uploaded on [TestPyPI](https://test.pypi.org/project/dscollection/). 
+You can install the unstable package right now using pip:
 ```shell
-python3 setup.py bdist_wheel
-pip3 install -e .
-# pip install dscollection
+pip install --upgrade -i https://test.pypi.org/simple dscollection
 ```
+---
 
-### 2. Upload to TestPyPI
-```shell
-pip3 install --upgrade twine
-
-# generate distribution archives 
-python3 -m build
-
-# upload distributions to testpypi
-twine upload --repository testpypi dist/*
-```
-
-### 3. Install newly uploaded package using pip
-```shell
-pip install -i https://test.pypi.org/simple/ dscollection 
-```
-
-> NOTE: DSCollection already uploaded to [TestPyPI](https://test.pypi.org/project/dscollection/).
-
-
-### Task description:
+## Task description:
 
 #### 1. **extract**:
 Extract some or all classes from dataset, generate a new dataset.
