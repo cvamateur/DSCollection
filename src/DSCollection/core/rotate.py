@@ -45,8 +45,10 @@ def rotate_point_by_point(point1: Tuple[float, float], center_point: Tuple[float
     return x1, y1
 
 
-def calculate_four_point(label: Tuple[float, float, float, float]) -> Tuple[
-    Tuple[int, int], Tuple[int, int], Tuple[int, int], Tuple[int, int]]:
+PointType = Tuple[int, int]
+
+
+def calculate_four_point(label: Tuple[float, float, float, float]) -> Tuple[PointType, PointType, PointType, PointType]:
     ltx, lty = label[:2]
     rbx, rby = label[2:]
 
@@ -111,7 +113,7 @@ def _rotate_label(label: Tuple[float, float, float, float], degree: int, h: int,
     return rlt, rrt, rlb, rrb
 
 
-def _calculate_divide_points(point1: Tuple[float, float], point2: Tuple[float, float], div: int):
+def _calculate_divide_points(point1: Tuple[float, float], point2: Tuple[float, float], div: int, h: int, w: int):
     pt1 = np.array(point1)
     pt2 = np.array(point2)
     points = []
@@ -119,7 +121,10 @@ def _calculate_divide_points(point1: Tuple[float, float], point2: Tuple[float, f
     while i < div:
         factor = i / (div - i)
         p = (pt1 + factor * pt2) / (factor + 1)
-        points.append(p.tolist())
+        x, y = p.tolist()
+        x = min(max(0, x), w)
+        y = min(max(0, y), h)
+        points.append((x, y))
         i += 1
 
     return points
@@ -138,10 +143,10 @@ def rotated_calculate_midpoint_bbox(label: Tuple[float, float, float, float], de
 
 def rotated_calculate_divide_point_bbox(label: Tuple[float, float, float, float], degree: int, h: int, w: int,
                                         div: int):
-    rlf, rlr, rlb, rrb = _rotate_label(label, degree, h, w)
-    points = _calculate_divide_points(rlf, rlr, div)
-    points.extend(_calculate_divide_points(rlr, rlb, div))
-    points.extend(_calculate_divide_points(rlb, rrb, div))
-    points.extend(_calculate_divide_points(rrb, rlf, div))
+    rlt, rrt, rlb, rrb = _rotate_label(label, degree, h, w)
+    points = _calculate_divide_points(rlt, rrt, div, h, w)
+    points.extend(_calculate_divide_points(rlt, rlb, div, h, w))
+    points.extend(_calculate_divide_points(rrt, rrb, div, h, w))
+    points.extend(_calculate_divide_points(rlb, rrb, div, h, w))
     points = np.array(points)
     return calculate_max_bbox(*points.tolist())
