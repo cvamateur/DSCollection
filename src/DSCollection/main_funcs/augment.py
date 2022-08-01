@@ -8,7 +8,7 @@ import shutil
 from os.path import join as path_join
 from typing import List
 
-from ..core.augment import (Augmentation, Invoker, Rotate, Save, CenterCrop, Blur, CoarseDropout)
+from ..core.augment import (Augmentation, Invoker, Rotate, Save, CenterCrop, Blur, CoarseDropout, DownScale)
 from ..core.dataset import Dataset, KITTI
 from ..utils.common import check_path
 from ..utils.tasks import TaskDispatcher, TASK
@@ -73,7 +73,7 @@ def main(args):
     if args.blur:
         cmd = Blur(
             blur_limit=args.blur_limit,
-            p=args.blur_prob
+            p=args.probability,
         )
         if args.special_mode:
             part = path_join(aug.output, "part{}".format(i))
@@ -89,7 +89,7 @@ def main(args):
             height=args.center_crop_height,
             min_area=args.min_area,
             min_visibility=args.min_visibility,
-            p=args.center_crop_prob
+            p=args.probability
         )
         if args.special_mode:
             part = path_join(aug.output, "part{}".format(i))
@@ -102,7 +102,7 @@ def main(args):
     if args.coarse_dropout:
         cmd = CoarseDropout(
             min_area=args.min_area,
-            min_visibility=args.min_visiblity,
+            min_visibility=args.min_visibility,
             max_holes=args.max_holes,
             max_width=args.max_width,
             max_height=args.max_height,
@@ -111,7 +111,23 @@ def main(args):
             min_height=args.min_height,
             fill_value=args.fill_value,
             mask_fill_value=args.mask_fill_value,
-            p=args.p
+            p=args.probability
+        )
+        if args.special_mode:
+            part = path_join(aug.output, "part{}".format(i))
+            nds = _special_augment(cmd, part, args.dtype, args.contiguous, input_datasets)
+            all_ds.append(nds)
+            i += 1
+        else:
+            invoker.add_command(cmd)
+    if args.down_scale:
+        cmd = DownScale(
+            min_area=args.min_area,
+            min_visibility=args.min_visibility,
+            scale_min=args.scale_min,
+            scale_max=args.scale_max,
+            interpolation=args.interpolation,
+            p=args.probability
         )
         if args.special_mode:
             part = path_join(aug.output, "part{}".format(i))

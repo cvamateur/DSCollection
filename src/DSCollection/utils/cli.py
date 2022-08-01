@@ -277,13 +277,11 @@ def add_augmentation_task_arguments(parser: ArgumentParser):
     group = parser.add_argument_group("Blur")
     group.add_argument("--blur", action="store_true", help="Augmentation Method: Blur.")
     group.add_argument("--blur-limit", type=int, default=7)
-    group.add_argument("--blur-prob", type=float, default=1.0)
 
     group = parser.add_argument_group("CenterCrop")
     group.add_argument("--center-crop", action="store_true", help="Augmentation Method: center crop.")
     group.add_argument("--center-crop-width", type=int)
     group.add_argument("--center-crop-height", type=int)
-    group.add_argument("--center-crop-prob", type=float, default=1.0)
 
     group = parser.add_argument_group("CoarseDropout")
     group.add_argument("--coarse-dropout", action="store_true", help="Whether to use coarse dropout.")
