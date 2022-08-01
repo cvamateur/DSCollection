@@ -12,6 +12,7 @@ from os.path import join as path_join
 from typing import List, Optional, Callable
 
 import albumentations as A
+import cv2
 import numpy as np
 from albumentations.core.bbox_utils import BboxProcessor
 
@@ -130,6 +131,19 @@ class CoarseDropout(PixelAugmentCommand):
                                    fill_value, mask_fill_value, always_apply, p=p)
 
         super(CoarseDropout, self).__init__(aug_func, min_area, min_visibility)
+
+
+class DownScale(PixelAugmentCommand):
+    def __init__(self,
+                 min_area: float = 0.0,
+                 min_visibility: float = 0.0,
+                 scale_min=0.25,
+                 scale_max=0.25,
+                 interpolation=cv2.INTER_NEAREST,
+                 p: float = 0.5
+                 ):
+        aug_func = A.Downscale(scale_min=scale_min, scale_max=scale_max, interpolation=interpolation, p=p)
+        super(DownScale, self).__init__(aug_func, min_area, min_visibility)
 
 
 # class TestCommand(Command):

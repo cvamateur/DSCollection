@@ -296,4 +296,10 @@ def add_augmentation_task_arguments(parser: ArgumentParser):
     group.add_argument("--fill-value", type=int, default=0)
     group.add_argument("--mask-fill-value", type=int)
 
+    group = parser.add_argument_group("DownScale")
+    group.add_argument("--down-scale", action="store_true", help="Whether to use down scale.")
+    group.add_argument("--scale-min", type=float, default=0.25)
+    group.add_argument("--scale-max", type=float, default=0.25)
+    group.add_argument("--interpolation", type=int, default=0, help="cv2.INTER_NEAREST")
+
 
