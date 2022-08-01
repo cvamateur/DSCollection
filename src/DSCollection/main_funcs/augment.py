@@ -100,7 +100,19 @@ def main(args):
             invoker.add_command(cmd)
 
     if args.coarse_dropout:
-        cmd = CoarseDropout(0, 0)
+        cmd = CoarseDropout(
+            min_area=args.min_area,
+            min_visibility=args.min_visiblity,
+            max_holes=args.max_holes,
+            max_width=args.max_width,
+            max_height=args.max_height,
+            min_holes=args.min_holes,
+            min_width=args.min_width,
+            min_height=args.min_height,
+            fill_value=args.fill_value,
+            mask_fill_value=args.mask_fill_value,
+            p=args.p
+        )
         if args.special_mode:
             part = path_join(aug.output, "part{}".format(i))
             nds = _special_augment(cmd, part, args.dtype, args.contiguous, input_datasets)

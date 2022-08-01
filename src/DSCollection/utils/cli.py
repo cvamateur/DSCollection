@@ -265,6 +265,7 @@ def add_augmentation_task_arguments(parser: ArgumentParser):
     group.add_argument("--common-mode", action="store_true")
     group.add_argument("--special-mode", action="store_true")
 
+    parser.add_argument("-p", "--probability", type=float, default=1.0)
     parser.add_argument("--min-area", type=float, default=0.0)
     parser.add_argument("--min-visibility", type=float, default=0.0)
 
@@ -286,4 +287,13 @@ def add_augmentation_task_arguments(parser: ArgumentParser):
 
     group = parser.add_argument_group("CoarseDropout")
     group.add_argument("--coarse-dropout", action="store_true", help="Whether to use coarse dropout.")
-    # group.add_argument("--")
+    group.add_argument("--max-holes", type=int, default=8)
+    group.add_argument("--max-height", type=int, default=8)
+    group.add_argument("--max-width", type=int, default=8)
+    group.add_argument("--min-holes", type=int)
+    group.add_argument("--min-height", type=int)
+    group.add_argument("--min-width", type=int)
+    group.add_argument("--fill-value", type=int, default=0)
+    group.add_argument("--mask-fill-value", type=int)
+
+
