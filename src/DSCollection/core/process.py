@@ -6,11 +6,11 @@
 import logging
 import math
 import os
+import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, Future, ProcessPoolExecutor
 from os.path import join as path_join
-from typing import List, Callable, Tuple, Dict
-import shutil
+from typing import List, Tuple, Dict
 
 import cv2
 import numpy as np

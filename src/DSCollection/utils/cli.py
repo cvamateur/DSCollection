@@ -261,5 +261,43 @@ def add_process_task_arguments(parser: ArgumentParser):
 
 
 def add_augmentation_task_arguments(parser: ArgumentParser):
-    parser.add_argument("-r", "--rotate", type=int, default=0, help="Degree of rotate.")
-    parser.add_argument("--divide-number", type=int, default=3, help="The number of split for rotated label.")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--common-mode", action="store_true")
+    group.add_argument("--special-mode", action="store_true")
+
+    parser.add_argument("-p", "--probability", type=float, default=1.0)
+    parser.add_argument("--min-area", type=float, default=0.0)
+    parser.add_argument("--min-visibility", type=float, default=0.0)
+
+    group = parser.add_argument_group("Rotate")
+    group.add_argument("--rotate", action="store_true", help="Whether to rotate.")
+    group.add_argument("--degree", type=int, default=0, help="Degree of rotate.(-180,180)")
+    group.add_argument("--divide-number", type=int, default=3, help="The number of split for rotated label.")
+
+    group = parser.add_argument_group("Blur")
+    group.add_argument("--blur", action="store_true", help="Augmentation Method: Blur.")
+    group.add_argument("--blur-limit", type=int, default=7)
+
+    group = parser.add_argument_group("CenterCrop")
+    group.add_argument("--center-crop", action="store_true", help="Augmentation Method: center crop.")
+    group.add_argument("--center-crop-width", type=int)
+    group.add_argument("--center-crop-height", type=int)
+
+    group = parser.add_argument_group("CoarseDropout")
+    group.add_argument("--coarse-dropout", action="store_true", help="Whether to use coarse dropout.")
+    group.add_argument("--max-holes", type=int, default=8)
+    group.add_argument("--max-height", type=int, default=8)
+    group.add_argument("--max-width", type=int, default=8)
+    group.add_argument("--min-holes", type=int)
+    group.add_argument("--min-height", type=int)
+    group.add_argument("--min-width", type=int)
+    group.add_argument("--fill-value", type=int, default=0)
+    group.add_argument("--mask-fill-value", type=int)
+
+    group = parser.add_argument_group("DownScale")
+    group.add_argument("--down-scale", action="store_true", help="Whether to use down scale.")
+    group.add_argument("--scale-min", type=float, default=0.25)
+    group.add_argument("--scale-max", type=float, default=0.25)
+    group.add_argument("--interpolation", type=int, default=0, help="cv2.INTER_NEAREST")
+
+
