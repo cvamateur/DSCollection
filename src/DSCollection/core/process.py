@@ -8,7 +8,7 @@ import math
 import os
 import shutil
 import sys
-from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, Future, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, Future
 from os.path import join as path_join
 from typing import List, Tuple, Dict
 
@@ -53,7 +53,6 @@ class Process:
             self.datasets.append(dataset)
 
         self.executor = ThreadPoolExecutor(max_workers=MAX_WORKER)
-        self.pro_executor = ProcessPoolExecutor(max_workers=MAX_WORKER)
         self.current_dataset_index = 0
         self.total_input = len(inputs)
         self._count = 0
@@ -90,12 +89,14 @@ class Process:
             logger.warning("Exist failed task")
 
     def load(self) -> Tuple[Dict[ImageLabel, np.ndarray]]:
+        process_bar = tqdm(total=0, desc="Process")
         for dataset in self.datasets:
-            self.current_dataset_index += 1
             dataset.load(skip_empty=False)
+            process_bar.total += len(dataset)
             iter_labels = self._chunkify(CHUNK_SIZE, dataset.labels)
             try:
                 labels = next(iter_labels)
+                process_bar.update(len(labels))
             except StopIteration:
                 continue
             pre_data = self.read_image(labels, dataset.root, dataset.imgDirName)
@@ -104,6 +105,7 @@ class Process:
                 self._wait_completed(pre_data)
                 try:
                     labels = next(iter_labels)
+                    process_bar.update(len(labels))
                 except StopIteration:
                     yield [f.result() for f in pre_data.keys()], [l for l in pre_data.values()]
                     break
@@ -345,8 +347,9 @@ class Process:
             img_path = path_join(self.output, self.convertor.imgDirName, img_name)
             lbl_path = path_join(self.output, self.convertor.lblDirName, lab_name)
 
-            futures.append(self.pro_executor.submit(self._save, self.convertor, img_path, lbl_path, img, lbl, ow, oh))
+            futures.append(self.executor.submit(self._save, self.convertor, img_path, lbl_path, img, lbl, ow, oh))
             self._count += 1
+        self._wait_completed(futures)
 
     def run(self, args):
         width, height = map(int, args.output_size)
@@ -356,11 +359,8 @@ class Process:
         crop_ratio = min(max(0.001, crop_ratio), 0.99)
         keep_emp_lbl = args.keep_empty_label
 
-        process_bar = tqdm(desc="Process", total=self.total_input)
-        crt_process = 0
-
         for img_data, labels in self.load():
-            batch_data = np.asarray(img_data)
+            batch_data = np.stack(img_data, 0)
             h, w = batch_data.shape[1:-1]
             dx, dy = self.center_crop(w, h, crop_size) if crop_size is not None else (0, 0)
             if dx == 0 and dy == 0:
@@ -397,6 +397,3 @@ class Process:
                 if self.output is not None:
                     img_data = list(_batch_data[:, ])
                     self.save(img_data, processed_labels, args.contiguous, width, height, keep_emp_lbl)
-
-            if self.current_dataset_index - crt_process == 1:
-                process_bar.update()
