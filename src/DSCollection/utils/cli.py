@@ -241,7 +241,7 @@ def add_combine_task_argument(parser: ArgumentParser):
 
 
 def add_process_task_arguments(parser: ArgumentParser):
-    parser.add_argument("--output-size", action=_XSepAction,
+    parser.add_argument("--output-size", action=_XSepAction, required=True,
                         help=f"Size of the final image (WxH; separated by 'x'.")
     parser.add_argument("-s", "--show", action="store_true", help="Whether show the annotated image.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Report dropped images.")

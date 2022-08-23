@@ -6,6 +6,7 @@ from typing import List, Union
 from tqdm import tqdm
 
 from ..utils.common import check_path
+from ..utils.imgutil import ImageUtil
 from .dataset import Dataset
 from .convertor import Convertor, LabelInfo
 
@@ -72,16 +73,30 @@ class DataExtractor:
                     imgName, ext = info.imgName.replace('/', '-').split('.')
                     dstImg = os.path.join(dstImgDir, imgName + self.imgExt)
                     dstLbl = os.path.join(dstLblDir, imgName.split('.')[0] + self.cvt.lblExt)
-                future = executor.submit(self._save_to_dst, srcImg, dstImg, info.data, dstLbl)
+                decoding = (ext != self.imgExt)
+                future = executor.submit(self._save_to_dst, srcImg, dstImg, info.data, dstLbl, decoding, self.imgExt)
                 futures.append(future)
 
             for future in tqdm(as_completed(futures), total=len(futures), desc="Extract dataset"):
                 future.result()
 
     @staticmethod
-    def _save_to_dst(srcImg: str, dstImg: str, lblBytes: bytes, dstLbl: str):
-        shutil.copy2(srcImg, dstImg)
+    def _save_to_dst(srcImg: str, dstImg: str, lblBytes: bytes, dstLbl: str,
+                     decoding: bool = False, ext: str = ".jpg"):
         with open(dstLbl, 'wb') as f:
             f.write(lblBytes)
+
+        if decoding:
+            with open(srcImg, "rb") as f:
+                imgRaw = f.read()
+            imgDec = ImageUtil.decode(imgRaw)
+            imgEnc = ImageUtil.encode(imgDec, ext)
+            with open(dstImg, "wb") as f:
+                f.write(imgEnc)
+        else:
+            shutil.copy2(srcImg, dstImg)
+
+
+
 
 
