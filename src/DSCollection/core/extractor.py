@@ -27,7 +27,7 @@ class DataExtractor:
 
     def __init__(self,  cvt: Convertor, imgExt: str = None):
         self.cvt = cvt
-        self.imgExt = imgExt
+        self.imgExt = imgExt if imgExt.startswith('.') else f".{imgExt}"
         self.num_workers = os.cpu_count() - 1
 
     def extract(self, ds: Dataset,
@@ -65,12 +65,12 @@ class DataExtractor:
                 srcImg = os.path.join(srcImgDir, info.imgName)
                 if contiguous:
                     imgName, ext = info.imgName.split('.')
-                    dstImg = os.path.join(dstImgDir, nameFmt.format(info.index, f".{ext}"))
+                    dstImg = os.path.join(dstImgDir, nameFmt.format(info.index, self.imgExt))
                     dstLbl = os.path.join(dstLblDir, nameFmt.format(info.index, self.cvt.lblExt))
                 else:
                     # make sure imgName is not a subdirectory structure
-                    imgName = info.imgName.replace('/', '-')
-                    dstImg = os.path.join(dstImgDir, imgName)
+                    imgName, ext = info.imgName.replace('/', '-').split('.')
+                    dstImg = os.path.join(dstImgDir, imgName + self.imgExt)
                     dstLbl = os.path.join(dstLblDir, imgName.split('.')[0] + self.cvt.lblExt)
                 future = executor.submit(self._save_to_dst, srcImg, dstImg, info.data, dstLbl)
                 futures.append(future)

@@ -197,6 +197,8 @@ def add_generate_task_arguments(parser: ArgumentParser):
 
 def add_extract_task_arguments(parser: ArgumentParser):
     parser.add_argument("-cls", "--classes", action=_OptSeqAction, help=f"Classes to extract, separate by '{OPTSEP}'.")
+    parser.add_argument("--ext", default=".jpg", help="Image file extension.")
+
     gp = parser.add_mutually_exclusive_group()
     gp.add_argument("-n", "--num-images", dest="n_imgs", type=int, metavar="N",
                     help="Randomly extract N images from each input dataset.")

@@ -11,7 +11,7 @@ def main(args):
     except ValueError:
         msg = f"Unknown convertor type: {args.dtype}"
         raise RuntimeError(msg)
-    e = DataExtractor(cvt)
+    e = DataExtractor(cvt, args.ext)
 
     input_datasets = []
     for input_root in args.input:
