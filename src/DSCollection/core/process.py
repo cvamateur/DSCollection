@@ -93,6 +93,7 @@ class Process:
         for dataset in self.datasets:
             dataset.load(skip_empty=False)
             process_bar.total += len(dataset)
+            convert_result = self.convertor.convert(dataset.labels)
             iter_labels = self._chunkify(CHUNK_SIZE, dataset.labels)
             try:
                 labels = next(iter_labels)
@@ -198,7 +199,7 @@ class Process:
         return s
 
     @classmethod
-    def roi_crop(cls, img_size: Tuple[int, int], tw: int, th: int, crop_mode: int, crop_ratio: float):
+    def cal_roi(cls, img_size: Tuple[int, int], tw: int, th: int, crop_mode: int, crop_ratio: float):
         ih, iw = img_size
         cx1, cy1, cx2, cy2 = cls._center_crop(img_size, tw, th)
         if crop_mode == 1:
@@ -360,28 +361,27 @@ class Process:
         keep_emp_lbl = args.keep_empty_label
 
         for img_data, labels in self.load():
-            batch_data = np.stack(img_data, 0)
-            h, w = batch_data.shape[1:-1]
-            dx, dy = self.center_crop(w, h, crop_size) if crop_size is not None else (0, 0)
-            if dx == 0 and dy == 0:
-                rois = self.roi_crop((h, w), tw=width, th=height, crop_mode=crop_mode, crop_ratio=crop_ratio)
-            else:
-                rois = self.roi_crop((crop_size, crop_size), width, height, crop_mode, crop_ratio=crop_ratio)
-
-            for (x1, y1, x2, y2) in rois:
-                _batch_data = batch_data[:, dy + y1:dy + y2, dx + x1:dx + x2, :]
-
-                roi = (x1 + dx, y1 + dy, x2 + dx, y2 + dy)
+            for image, label in zip(img_data, labels):
+                h, w = image.shape[:-1]
+                dx = dy = 0
+                crop_w, crop_h = 0, 0
+                if crop_size:
+                    dx, dy = self.center_crop(w, h, crop_size)
+                    crop_w = crop_h = crop_size
+                rois = self.cal_roi((crop_w, crop_h), width, height, crop_mode, crop_ratio)
                 processed_labels = []
-                for i, lbl in enumerate(labels):
-                    keeps, skips = self.process_label(lbl, roi,
+                processed_images = []
+                for (x1, y1, x2, y2) in rois:
+                    _img = image[dy + y1:dy + y2, dx + x1:dx + x2, :]
+                    roi = (x1 + dx, y1 + dy, x2 + dx, y2 + dy)
+                    keeps, skips = self.process_label(label, roi,
                                                       min_area=args.min_area,
                                                       max_ratio=args.max_ratio,
                                                       min_ratio=args.min_ratio,
                                                       scale=height / (roi[3] - roi[1]))
-                    _lbl = ImageLabel(lbl.fileName, keeps, lbl.width, lbl.height, lbl.depth)
+                    _lbl = ImageLabel(label.fileName, keeps)
                     if args.show:
-                        img = _batch_data[i, ...].copy()
+                        img = _img.copy()
                         img = cv2.resize(img, (width, height), interpolation=cv2.INTER_CUBIC)
                         img = self.annotate_image(img, keeps)
 
@@ -391,9 +391,45 @@ class Process:
                             self.dotted_line(img, pt1, pt2, (0, 200, 0), 2)
 
                         self.show(img)
-
+                    processed_images.append(_img)
                     processed_labels.append(_lbl)
-
                 if self.output is not None:
-                    img_data = list(_batch_data[:, ])
-                    self.save(img_data, processed_labels, args.contiguous, width, height, keep_emp_lbl)
+                    self.save(processed_images, processed_labels, args.contiguous, width, height, keep_emp_lbl)
+
+            # batch_data = np.stack(img_data, 0)
+            # h, w = batch_data.shape[1:-1]
+            # dx, dy = self.center_crop(w, h, crop_size) if crop_size is not None else (0, 0)
+            # if dx == 0 and dy == 0:
+            #     rois = self.roi_crop((h, w), tw=width, th=height, crop_mode=crop_mode, crop_ratio=crop_ratio)
+            # else:
+            #     rois = self.roi_crop((crop_size, crop_size), width, height, crop_mode, crop_ratio=crop_ratio)
+
+            # for (x1, y1, x2, y2) in rois:
+            #     _batch_data = batch_data[:, dy + y1:dy + y2, dx + x1:dx + x2, :]
+            #
+            #     roi = (x1 + dx, y1 + dy, x2 + dx, y2 + dy)
+            #     processed_labels = []
+            #     for i, lbl in enumerate(labels):
+            #         keeps, skips = self.process_label(lbl, roi,
+            #                                           min_area=args.min_area,
+            #                                           max_ratio=args.max_ratio,
+            #                                           min_ratio=args.min_ratio,
+            #                                           scale=height / (roi[3] - roi[1]))
+            #         _lbl = ImageLabel(lbl.fileName, keeps, lbl.width, lbl.height, lbl.depth)
+            #         if args.show:
+            #             img = _batch_data[i, ...].copy()
+            #             img = cv2.resize(img, (width, height), interpolation=cv2.INTER_CUBIC)
+            #             img = self.annotate_image(img, keeps)
+            #
+            #             for sk_lbl in skips:
+            #                 pt1 = int(sk_lbl.left), int(sk_lbl.top)
+            #                 pt2 = int(sk_lbl.right), int(sk_lbl.bottom)
+            #                 self.dotted_line(img, pt1, pt2, (0, 200, 0), 2)
+            #
+            #             self.show(img)
+            #
+            #         processed_labels.append(_lbl)
+            #
+            #     if self.output is not None:
+            #         img_data = list(_batch_data[:, ])
+            #         self.save(img_data, processed_labels, args.contiguous, width, height, keep_emp_lbl)
