@@ -203,7 +203,7 @@ class VOC(Dataset, dtype=DatasetType.VOC):
         if not all(map(os.path.exists, imagePaths)):
             msg = "Not all images exists, dataset corrupted"
             raise RuntimeError(msg)
-        if not all(map(os.path.exists, labelPaths)):
+        if not skip_empty and not all(map(os.path.exists, labelPaths)):
             msg = "Not all labels exists, dataset corrupted"
             raise RuntimeError(msg)
 
