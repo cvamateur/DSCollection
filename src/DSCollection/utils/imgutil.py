@@ -15,7 +15,7 @@ class ImageUtil:
         return image
 
     @classmethod
-    def encode(cls, img: np.ndarray, ext: str = ".png") -> Union[bytes, None]:
+    def encode(cls, img: np.ndarray, ext: str = ".jpg") -> Union[bytes, None]:
         imgRaw = cv2.imencode(ext, img)[1]
         imgData = np.array(imgRaw).tobytes()
         return imgData

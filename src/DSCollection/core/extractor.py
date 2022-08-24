@@ -65,12 +65,12 @@ class DataExtractor:
             for info in cvt_results:
                 srcImg = os.path.join(srcImgDir, info.imgName)
                 if contiguous:
-                    imgName, ext = info.imgName.split('.')
+                    imgName, ext = os.path.splitext(info.imgName)
                     dstImg = os.path.join(dstImgDir, nameFmt.format(info.index, self.imgExt))
                     dstLbl = os.path.join(dstLblDir, nameFmt.format(info.index, self.cvt.lblExt))
                 else:
                     # make sure imgName is not a subdirectory structure
-                    imgName, ext = info.imgName.replace('/', '-').split('.')
+                    imgName, ext = os.path.splitext(info.imgName.replace('/', '-'))
                     dstImg = os.path.join(dstImgDir, imgName + self.imgExt)
                     dstLbl = os.path.join(dstLblDir, imgName.split('.')[0] + self.cvt.lblExt)
                 decoding = (ext != self.imgExt)
@@ -95,8 +95,3 @@ class DataExtractor:
                 f.write(imgEnc)
         else:
             shutil.copy2(srcImg, dstImg)
-
-
-
-
-

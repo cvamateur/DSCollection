@@ -50,7 +50,7 @@ del _T_coord
 
 @dataclass
 class ImageLabel:
-    fileName: str
+    fileName: str         # image name
     boxes: List[Box]
     width: int = field(default=-1)
     height: int = field(default=-1)

@@ -33,7 +33,7 @@ class LabelInfo:
     __slots__ = "index", "data", "imgName"
     index: int
     data: bytes
-    imgName: str
+    imgName: str   # fileName
 
     def __getstate__(self):
         return dict(
