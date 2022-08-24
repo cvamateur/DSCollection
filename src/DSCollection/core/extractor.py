@@ -95,8 +95,3 @@ class DataExtractor:
                 f.write(imgEnc)
         else:
             shutil.copy2(srcImg, dstImg)
-
-
-
-
-

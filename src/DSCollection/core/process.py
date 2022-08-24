@@ -323,8 +323,9 @@ class Process:
     def _save(cvt: Convertor, img_path: str, lbl_path: str, img: np.ndarray, label: ImageLabel, ow: int, oh: int):
 
         label_info = cvt.convert_label(1, label)
+        ext = os.path.splitext(label_info.imgName)[1]
         img = cv2.resize(img, (ow, oh), interpolation=cv2.INTER_CUBIC)
-        bimg = ImageUtil.encode(img)
+        bimg = ImageUtil.encode(img, ext)
         with open(img_path, 'wb') as f:
             f.write(bimg)
         with open(lbl_path, 'wb') as f:
@@ -334,11 +335,12 @@ class Process:
              keep_emp_lbl: bool):
         futures = []
         for img, lbl in zip(img_data, labels):
+            _, ext = os.path.splitext(lbl.fileName)
             if contiguous:
-                img_name = "{:06}{}".format(self._count, ".png")
+                img_name = "{:06}{}".format(self._count, ext)
                 lab_name = "{:06}{}".format(self._count, ".txt")
             else:
-                img_name = "{:06}{}".format(self._count, ".png")
+                img_name = "{:06}{}".format(self._count, ext)
                 lab_name = "{:06}{}".format(self._count, ".txt")
 
             if keep_emp_lbl and len(lbl.boxes) == 0:
