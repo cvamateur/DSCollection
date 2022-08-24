@@ -16,7 +16,7 @@ import cv2
 import numpy as np
 from tqdm import tqdm
 
-from .convertor import Convertor
+from .convertor import Convertor, LabelInfo
 from ..core.dataset import Dataset, ImageLabel, KITTI, Box
 from ..utils.common import check_path
 from ..utils.imgutil import ImageUtil
@@ -25,12 +25,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 CHUNK_SIZE = 10
-MAX_WORKER = 5
+MAX_WORKER = os.cpu_count() - 1
 
 
 class Process:
 
-    def __init__(self, inputs: List[str], dst_dtype: str, output: str, force: bool = False):
+    def __init__(self, inputs: List[str], dst_dtype: str, output: str, force: bool = False, img_ext: str = ".jpg"):
+        self.img_ext = img_ext if img_ext.startswith(".") else f".{img_ext}"
         self.output = output
         if os.path.exists(self.output):
             if force:
@@ -321,37 +322,41 @@ class Process:
         return boxes, skipped_boxes
 
     @staticmethod
-    def _save(cvt: Convertor, img_path: str, lbl_path: str, img: np.ndarray, label: ImageLabel, ow: int, oh: int):
-
-        label_info = cvt.convert_label(1, label)
-        ext = os.path.splitext(label_info.imgName)[1]
-        img = cv2.resize(img, (ow, oh), interpolation=cv2.INTER_CUBIC)
+    def _save(img_path: str, lbl_path: str, img: np.ndarray, label_info: LabelInfo, width: int, height: int, ext: str):
+        img = cv2.resize(img, (width, height), interpolation=cv2.INTER_CUBIC)
         bimg = ImageUtil.encode(img, ext)
         with open(img_path, 'wb') as f:
             f.write(bimg)
         with open(lbl_path, 'wb') as f:
             f.write(label_info.data)
 
-    def save(self, img_data: List[np.ndarray], labels: List[ImageLabel], contiguous: bool, ow: int, oh: int,
+    def save(self, img_data: List[np.ndarray], labels: List[ImageLabel], contiguous: bool, width: int, height: int,
              keep_emp_lbl: bool):
         futures = []
+        d = 8
+        if self._count > 10 ** d:
+            d += 1
+        filename_format = "{:0%d}{}" % d
         for img, lbl in zip(img_data, labels):
-            _, ext = os.path.splitext(lbl.fileName)
+            lbl_info = self.convertor.convert_label(self._count, lbl)
             if contiguous:
-                img_name = "{:06}{}".format(self._count, ext)
-                lab_name = "{:06}{}".format(self._count, ".txt")
+                img_name = filename_format.format(self._count, self.img_ext)
+                lab_name = filename_format.format(self._count, self.convertor.lblExt)
             else:
-                img_name = "{:06}{}".format(self._count, ext)
-                lab_name = "{:06}{}".format(self._count, ".txt")
+                filename, ext = os.path.splitext(lbl_info.imgName.replace('/', '-'))
+                img_name = f"{filename}{self.img_ext}"
+                lab_name = f"{filename}{self.convertor.lblExt}"
 
-            if keep_emp_lbl and len(lbl.boxes) == 0:
+            if len(lbl.boxes) == 0 and not keep_emp_lbl:
                 continue
 
             img_path = path_join(self.output, self.convertor.imgDirName, img_name)
             lbl_path = path_join(self.output, self.convertor.lblDirName, lab_name)
 
-            futures.append(self.executor.submit(self._save, self.convertor, img_path, lbl_path, img, lbl, ow, oh))
+            future = self.executor.submit(self._save, img_path, lbl_path, img, lbl_info, width, height, self.img_ext)
+            futures.append(future)
             self._count += 1
+
         self._wait_completed(futures)
 
     def run(self, args):
@@ -359,7 +364,7 @@ class Process:
         crop_size = args.crop_size
         crop_mode = args.crop_mode
         crop_ratio = args.crop_ratio
-        crop_ratio = min(max(0.001, crop_ratio), 0.99)
+        crop_ratio = min(max(0.1, crop_ratio), 1.0)
         keep_emp_lbl = args.keep_empty_label
 
         for img_data, labels in self.load():
