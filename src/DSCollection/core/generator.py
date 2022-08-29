@@ -161,6 +161,8 @@ class Generator:
             raise RuntimeError(msg)
         self.outDir, self.imgDir, self.lblDir = self.check_output(outDir, subdir, cvt)
         self.imgExt = imgExt if is_image(imgExt) else ".jpg"
+        if not self.imgExt.startswith('.'):
+            self.imgExt = f".{self.imgExt}"
         self.lblExt = cvt.lblExt
         self.cvt_label_func = cvt.convert_label
 
@@ -766,7 +768,7 @@ def probe_func(pad: Gst.Pad, info: Gst.PadProbeInfo, gen: Generator) -> Gst.PadP
         width = frame_meta.source_frame_width
         height = frame_meta.source_frame_height
 
-        print(f"[{width}x{height}] fIdx: {frame_idx}, bIdx: {batch_idx}, sIdx: {stream_idx}")
+        # print(f"[{width}x{height}] fIdx: {frame_idx}, bIdx: {batch_idx}, sIdx: {stream_idx}")
 
         # Traverse objects detected by gie
         boxes = []

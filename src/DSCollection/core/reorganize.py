@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Union
 from tqdm import tqdm
 
-from ..utils.common import check_path
+from ..utils.common import check_path, is_image
 from .dataset import Dataset
 
 
@@ -224,7 +224,7 @@ class DatasetCombiner:
         for dsRoot in self.inputs:
             imgDir = os.path.join(dsRoot, self.DsKlass.imgDirName)
             lblDir = os.path.join(dsRoot, self.DsKlass.lblDirName)
-            imgFnames = [name for name in os.listdir(imgDir)]
+            imgFnames = [name for name in os.listdir(imgDir) if is_image(name)]
             lblFnames = [name.split('.')[0] + self.DsKlass.lblExt for name in imgFnames]
             imgPaths = [os.path.join(imgDir, name) for name in imgFnames]
             lblPaths = [os.path.join(lblDir, name) for name in lblFnames]
@@ -269,8 +269,8 @@ class DatasetCombiner:
         if drop:
             for inpDir in self.inputs:
                 try:
-                    os.remove(os.path.abspath(os.path.expanduser(inpDir)))
-                except PermissionError:
-                    sys.stdout.write("Permission denied, unable to remove: %s\n" % inpDir)
+                    shutil.rmtree(os.path.abspath(os.path.expanduser(inpDir)))
+                except Exception:
+                    sys.stdout.write("warn: unable to remove: %s\n" % inpDir)
                 else:
                     sys.stdout.write(f"Remove path: {inpDir}\n")

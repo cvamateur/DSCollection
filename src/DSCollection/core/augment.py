@@ -213,10 +213,10 @@ class Augmentation:
         futures = []
         for img, lbl in zip(img_data, labels):
             if self.contiguous:
-                img_name = "{:06}{}".format(self._count, ".png")
+                img_name = "{:06}{}".format(self._count, ".jpg")
                 lab_name = "{:06}{}".format(self._count, ".txt")
             else:
-                img_name = "{:06}{}".format(self._count, ".png")
+                img_name = "{:06}{}".format(self._count, ".jpg")
                 lab_name = "{:06}{}".format(self._count, ".txt")
 
             img_path = path_join(self.output, self.convertor.imgDirName, img_name)

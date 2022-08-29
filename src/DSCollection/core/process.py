@@ -89,7 +89,7 @@ class Process:
         if res.not_done:
             logger.warning("Exist failed task")
 
-    def load(self) -> Tuple[Dict[ImageLabel, np.ndarray]]:
+    def load(self) -> Tuple[List[np.ndarray], List[ImageLabel]]:
         process_bar = tqdm(total=0, desc="Process")
         for dataset in self.datasets:
             dataset.load(skip_empty=False)
@@ -330,22 +330,22 @@ class Process:
         with open(lbl_path, 'wb') as f:
             f.write(label_info.data)
 
-    def save(self, img_data: List[np.ndarray], labels: List[ImageLabel], contiguous: bool, width: int, height: int,
-             keep_emp_lbl: bool):
+    def save(self, img_data: List[np.ndarray], labels: List[ImageLabel], local_idx: List[int],
+             contiguous: bool, width: int, height: int, keep_emp_lbl: bool):
         futures = []
         d = 8
         if self._count > 10 ** d:
             d += 1
         filename_format = "{:0%d}{}" % d
-        for img, lbl in zip(img_data, labels):
+        for img, lbl, roiIdx in zip(img_data, labels, local_idx):
             lbl_info = self.convertor.convert_label(self._count, lbl)
             if contiguous:
                 img_name = filename_format.format(self._count, self.img_ext)
                 lab_name = filename_format.format(self._count, self.convertor.lblExt)
             else:
                 filename, ext = os.path.splitext(lbl_info.imgName.replace('/', '-'))
-                img_name = f"{filename}{self.img_ext}"
-                lab_name = f"{filename}{self.convertor.lblExt}"
+                img_name = f"{filename}-{roiIdx}-{self.img_ext}"
+                lab_name = f"{filename}-{roiIdx}-{self.convertor.lblExt}"
 
             if len(lbl.boxes) == 0 and not keep_emp_lbl:
                 continue
@@ -367,6 +367,8 @@ class Process:
         crop_ratio = min(max(0.1, crop_ratio), 1.0)
         keep_emp_lbl = args.keep_empty_label
 
+        img_data: List[np.ndarray]
+        labels: List[ImageLabel]
         for img_data, labels in self.load():
             for image, label in zip(img_data, labels):
                 h, w = image.shape[:-1]
@@ -378,7 +380,8 @@ class Process:
                 rois = self.cal_roi((crop_h, crop_w), width, height, crop_mode, crop_ratio)
                 processed_labels = []
                 processed_images = []
-                for (x1, y1, x2, y2) in rois:
+                processed_roi_index = []
+                for i, (x1, y1, x2, y2) in enumerate(rois):
                     _img = image[dy + y1:dy + y2, dx + x1:dx + x2, :]
                     roi = (x1 + dx, y1 + dy, x2 + dx, y2 + dy)
                     keeps, skips = self.process_label(label, roi,
@@ -386,6 +389,13 @@ class Process:
                                                       max_ratio=args.max_ratio,
                                                       min_ratio=args.min_ratio,
                                                       scale=height / (roi[3] - roi[1]))
+
+                    if not keeps and not keep_emp_lbl:
+                        sys.stderr.write(f"skip: got empty label while `c{args.crop_mode}` "
+                                         f"processing the {i}-th roi from image: {label.fileName}\n")
+                        if not args.show:
+                            continue
+
                     _lbl = ImageLabel(label.fileName, keeps)
                     if args.show:
                         img = _img.copy()
@@ -396,9 +406,11 @@ class Process:
                             pt1 = int(sk_lbl.left), int(sk_lbl.top)
                             pt2 = int(sk_lbl.right), int(sk_lbl.bottom)
                             self.dotted_line(img, pt1, pt2, (0, 200, 0), 2)
-
                         self.show(img)
+
                     processed_images.append(_img)
                     processed_labels.append(_lbl)
+                    processed_roi_index.append(i)
                 if self.output is not None:
-                    self.save(processed_images, processed_labels, args.contiguous, width, height, keep_emp_lbl)
+                    self.save(processed_images, processed_labels, processed_roi_index,
+                              args.contiguous, width, height, keep_emp_lbl)
