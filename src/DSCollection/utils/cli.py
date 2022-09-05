@@ -69,7 +69,7 @@ class _EvalValueAction(argparse._StoreAction):
 
     def __call__(self, parser, namespace, value, option_string=None):
         try:
-            ast.literal_eval(value)
+            value = ast.literal_eval(value)
         except (ValueError, SyntaxError):
             pass
         super(_EvalValueAction, self).__call__(parser, namespace, value, option_string)
@@ -246,7 +246,7 @@ def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("-s", "--show", action="store_true", help="Whether show the annotated image.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Report dropped images.")
     parser.add_argument("-f", "--force", action="store_true",
-                        help="Delete exist output directory, regenernate dataset.")
+                        help="Delete exist output directory, regenerate dataset.")
     parser.add_argument("--crop-size", type=int, help="Center crop size (default: 1296).")
 
     parser.add_argument("--c1", dest="crop_mode", action="store_const", const=1, help="The number of cropped images.")
@@ -258,6 +258,9 @@ def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("--min-ratio", type=float, default=0.36, help="Minimum w/h ratio that object will be ignored.")
     parser.add_argument("--max-ratio", type=float, default=2.0, help="Maximum w/h ratio that object will be ignored.")
     parser.add_argument("--keep-empty-label", action="store_true", help="Whether to keep label if it's empty.")
+
+    parser.add_argument("--class-map", action=_EvalValueAction,
+                        help="The classes map for convert some label name to target name.")
     return parser
 
 
@@ -300,5 +303,3 @@ def add_augmentation_task_arguments(parser: ArgumentParser):
     group.add_argument("--scale-min", type=float, default=0.25)
     group.add_argument("--scale-max", type=float, default=0.25)
     group.add_argument("--interpolation", type=int, default=0, help="cv2.INTER_NEAREST")
-
-

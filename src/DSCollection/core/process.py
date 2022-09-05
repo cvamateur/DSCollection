@@ -30,7 +30,9 @@ MAX_WORKER = os.cpu_count() - 1
 
 class Process:
 
-    def __init__(self, inputs: List[str], dst_dtype: str, output: str, force: bool = False, img_ext: str = ".jpg"):
+    def __init__(self, inputs: List[str], dst_dtype: str, output: str, force: bool = False, img_ext: str = ".jpg",
+                 class_map: Dict[str, str] = None):
+        self.cls_map = class_map if class_map else {}
         self.img_ext = img_ext if img_ext.startswith(".") else f".{img_ext}"
         self.output = output
         if os.path.exists(self.output):
@@ -265,8 +267,7 @@ class Process:
         for pt in interpolate((x0, y1), (x1, y1)):
             cv2.circle(image, pt, 1, color, -thickness)
 
-    @staticmethod
-    def process_label(lbl: ImageLabel,
+    def process_label(self, lbl: ImageLabel,
                       roi: Tuple[int, int, int, int],
                       min_area: int,
                       min_ratio: float,
@@ -300,12 +301,13 @@ class Process:
             r = w / (h + 1e-6)
 
             # filter objects
+            box_name = self.cls_map.get(box.name, box.name)
             if a >= min_area and min_ratio <= r <= max_ratio:
-                keeped_objs.append((xmin, ymin, xmax, ymax, w, h, a, r, box.name))
-                boxes.append(Box(xmin, ymin, xmax, ymax, box.name))
+                keeped_objs.append((xmin, ymin, xmax, ymax, w, h, a, r, box_name))
+                boxes.append(Box(xmin, ymin, xmax, ymax, box_name))
             else:
-                skipped_objs.append((xmin, ymin, xmax, ymax, w, h, a, r, box.name))
-                skipped_boxes.append(Box(xmin, ymin, xmax, ymax, box.name))
+                skipped_objs.append((xmin, ymin, xmax, ymax, w, h, a, r, box_name))
+                skipped_boxes.append(Box(xmin, ymin, xmax, ymax, box_name))
 
         if verbose:
             print(f"Number objects: {len(keeped_objs)} / {total}")
