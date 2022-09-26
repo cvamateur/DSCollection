@@ -1,6 +1,7 @@
 import configparser
 import os
 import re
+import shutil
 import sys
 import glob
 import time
@@ -37,6 +38,9 @@ g_src_list: List[Gst.Element]   # Static array containing current source element
 g_prc_list: List[Gst.Element]   # Static array containing current preprocess elements
 g_cls_dict: Dict[int, List[str]]  # Map model unique-id to class names
 
+# CPU decode retry
+g_cpu_decode_retry: bool = False
+
 
 class InputType(IntEnum):
     UNKNOWN = 0
@@ -53,13 +57,14 @@ class MemoryType(IntEnum):
 
 class _GeneratorDaemon(Process):
 
-    def __init__(self, index: int, queue: Queue):
+    def __init__(self, index: int, queue: Queue, timeout: int = None):
         super(_GeneratorDaemon, self).__init__()
         self.index = index
         self.name = f"Subprocess - {index}"
         self.queue = queue
         self.daemon = True
         self._buffer = threadQueue()
+        self.timeout = timeout
         self._num_workers = 2
         self._worker = []
 
@@ -71,13 +76,13 @@ class _GeneratorDaemon(Process):
 
         # Start two threads
         for i in range(self._num_workers):
-            worker = _GeneratorDaemonWorker(self._buffer, self.index, i)
+            worker = _GeneratorDaemonWorker(self._buffer, self.index, i, self.timeout)
             worker.start()
             self._worker.append(worker)
 
         while True:
             try:
-                data = self.queue.get(timeout=10)
+                data = self.queue.get(timeout=self.timeout)
             except Empty:
                 sys.stderr.write(f"{self.name}: timeout, quit\n")
                 break
@@ -98,16 +103,17 @@ class _GeneratorDaemon(Process):
 
 class _GeneratorDaemonWorker(Thread):
 
-    def __init__(self, queue: threadQueue, pIdx: int, tIdx: int):
+    def __init__(self, queue: threadQueue, pIdx: int, tIdx: int, timeout: int = None):
         super(_GeneratorDaemonWorker, self).__init__()
         self._q = queue
         self.name = f"[{pIdx}] Thread - {tIdx}"
         self.daemon = True
+        self.timeout = timeout
 
     def run(self) -> None:
         while True:
             try:
-                content = self._q.get(timeout=10)
+                content = self._q.get(timeout=self.timeout)
             except Empty:
                 sys.stderr.write(f"{self.name}: timeout, quit\n")
                 break
@@ -130,7 +136,7 @@ class Generator:
                  models: List[str] = None,
                  dType: str = DatasetType.KITTI,
                  subdir: str = "",
-                 imgExt: str = ".png",
+                 imgExt: str = ".jpg",
                  indices: List[int] = None,
                  max_srcs: int = None,
                  skip_mode: int = None,
@@ -143,7 +149,10 @@ class Generator:
                  show_pipe: bool = False,
                  contiguous: bool = False,
                  drop_empty: bool = False,
-                 save_empty_label: bool = False):
+                 # save_empty_label: bool = False,
+                 force_override: bool = False,
+                 cpu_decoding: bool = False,
+                 timeout: int = 200):
 
         # Initialize input paths
         self.input_type, self.input_uris = self.check_inputs(inputs)
@@ -152,6 +161,8 @@ class Generator:
                 indices = indices * len(self.input_uris)
             assert len(indices) == len(self.input_uris)
             self.indices = [int(i) for i in indices]
+        elif not indices:
+            self.indices = [0]
 
         # Initialize output path
         try:
@@ -159,7 +170,7 @@ class Generator:
         except ValueError:
             msg = "error: unsupported dtype"
             raise RuntimeError(msg)
-        self.outDir, self.imgDir, self.lblDir = self.check_output(outDir, subdir, cvt)
+        self.outDir, self.imgDir, self.lblDir = self.check_output(outDir, subdir, cvt, force_override)
         self.imgExt = imgExt if is_image(imgExt) else ".jpg"
         if not self.imgExt.startswith('.'):
             self.imgExt = f".{self.imgExt}"
@@ -180,13 +191,13 @@ class Generator:
         self.show_pipe = show_pipe
         self.contiguous = contiguous
         self.drop_empty = drop_empty
-        self.save_empty_label = save_empty_label
+        # self.save_empty_label = save_empty_label
         if contiguous:
             self.imgPathFMT = os.path.join(self.imgDir, "{count:08d}" + self.imgExt)
             self.lblPathFMT = os.path.join(self.lblDir, "{count:08d}" + self.lblExt)
         else:
-            self.imgPathFMT = os.path.join(self.imgDir, "{name}-{fIdx}-{cIdx}" + self.imgExt)
-            self.lblPathFMT = os.path.join(self.lblDir, "{name}-{fIdx}-{cIdx}" + self.lblExt)
+            self.imgPathFMT = os.path.join(self.imgDir, "{name}-{cIdx}-{fIdx}" + self.imgExt)
+            self.lblPathFMT = os.path.join(self.lblDir, "{name}-{cIdx}-{fIdx}" + self.lblExt)
 
         # Initialization of Gstreamer
         Gst.init(None)
@@ -199,19 +210,22 @@ class Generator:
 
         self.skip_mode = 0 if not skip_mode else max(0, min(2, int(skip_mode)))
         self.interval = 0 if not interval else max(0, int(interval))
+        if self.interval > 30:
+            sys.stderr.write("warn: interval should in range [0, 30]. set to 30\n")
+            self.interval = 30
+
         self.gpu_id = 0 if not gpu_id else max(0, int(gpu_id))
         self.cam_shifts = (0, 0, 0, 0) if not camera_shifts else tuple(int(x) for x in camera_shifts)
         self.crop_size = 1296 if not crop_size else max(100, min(1296, int(crop_size)))
         self.mem_type = MemoryType.CUDA_UNIFIED if not memory_type else max(0, min(3, int(memory_type)))
+        self.cpu_decoding = cpu_decoding
+        self.timeout = None if not timeout else timeout
 
         # Initialize workers that save img-bytes and lbl-bytes
         self.num_workers = 1 if not num_workers else max(1, min(os.cpu_count() - 1, int(num_workers)))
         self.buffer = Queue()
         self.workers: List[_GeneratorDaemon] = []
-        for i in range(self.num_workers):
-            worker = _GeneratorDaemon(i, self.buffer)
-            worker.start()
-            self.workers.append(worker)
+        self.workers_started: bool = False
 
         # Print info
         sys.stdout.write(f"INFO: Generator initialization complete\n")
@@ -232,6 +246,21 @@ class Generator:
         g_src_list = [None] * self.max_srcs
         g_prc_list = [None] * self.max_srcs
         g_cls_dict = {}
+
+    def start_workers(self):
+        if self.workers_started:
+            return
+        self.workers.clear()
+        for i in range(self.num_workers):
+            worker = _GeneratorDaemon(i, self.buffer, self.timeout)
+            worker.start()
+            self.workers.append(worker)
+        sys.stdout.write(f"{self.num_workers} workers started\n")
+        self.workers_started = True
+
+    def send_worker_stop_signal(self):
+        for _ in range(self.num_workers):
+            self.buffer.put(None)
 
     def check_inputs(self, inputs: List[str]):
         """
@@ -255,7 +284,7 @@ class Generator:
                     sys.stderr.write("warn: got invalid input path: %s\n" % inputPath)
 
             for path in pathList:
-                path = os.path.abspath(path)
+                path = os.path.abspath(os.path.expanduser(path))
                 path_type, files = self._check_input_type(path)
                 if input_type is None:
                     input_type = path_type
@@ -281,7 +310,7 @@ class Generator:
                 return InputType.IMAGE, [path]
 
         if os.path.isdir(path):
-            fnames = os.listdir()
+            fnames = os.listdir(path)
             videos = list(map(is_video, fnames))
             if len(fnames) == len(videos):
                 return InputType.VIDEO, ["file://" + os.path.join(path, fn) for fn in fnames]
@@ -297,7 +326,7 @@ class Generator:
 
     @staticmethod
     def _parse_image_location(path: str) -> Tuple[str, str, str]:
-        input_images_pattern = re.compile(r"(.*)(%\d*[u\d])(\.\w+)")
+        input_images_pattern = re.compile(r"(.*)(%\d*[ud\d])(\.\w+)")
         matched = input_images_pattern.match(path)
         if matched:
             prefix, name, ext = matched.groups()
@@ -306,11 +335,14 @@ class Generator:
             return "", "", ""
 
     @staticmethod
-    def check_output(output_dir: str, subdir: str, cvt: Convertor):
+    def check_output(output_dir: str, subdir: str, cvt: Convertor, force: bool = False):
         output_dir = os.path.abspath(os.path.expanduser(output_dir))
         if os.path.exists(output_dir):
-            msg = f"error: Output dataset already exist: {output_dir}"
-            raise RuntimeError(msg)
+            if not force:
+                msg = f"error: Output dataset already exist: {output_dir}"
+                raise RuntimeError(msg)
+            else:
+                shutil.rmtree(output_dir)
         dsRoot, dsName = os.path.split(output_dir)
         if not os.path.exists(dsRoot):
             msg = f"error: Output directory not exist {dsRoot}"
@@ -524,7 +556,7 @@ class Generator:
             except IndexError:
                 return
 
-            src_bin = build_uri_source(i, uri, self.skip_mode, self.interval, self.gpu_id)
+            src_bin = build_uri_source(i, uri, self.skip_mode, self.interval, self.gpu_id, self.cpu_decoding)
             prc_bin = build_preprocess(i, self.cam_shifts, self.crop_size, self.gpu_id, self.mem_type)
             self.pipeline.add(src_bin)
             self.pipeline.add(prc_bin)
@@ -698,8 +730,10 @@ class Generator:
             self.pipeline.set_state(Gst.State.PLAYING)
 
     def _wait_until_finish(self):
-        for _ in range(self.num_workers):
-            self.buffer.put(None)
+        if not self.workers_started:
+            return
+        self.send_worker_stop_signal()
+
         total = self.buffer.qsize()
         if total <= 0: return
         progress = tqdm(total=total, desc="Wait until finish")
@@ -721,11 +755,15 @@ class Generator:
         while self.input_uris:
             self.loop = GLib.MainLoop.new(None, False)
 
+            print("Build pipeline")
             self.build_pipeline()
+
             bus = self.pipeline.get_bus()
             bus.add_signal_watch()
             bus.connect("message", bus_call, self)
             GLib.timeout_add_seconds(1, watch_dog, self)
+
+            print("Start pipeline")
             self.pipeline.set_state(Gst.State.PLAYING)
 
             try:
@@ -747,6 +785,7 @@ class Generator:
 def probe_func(pad: Gst.Pad, info: Gst.PadProbeInfo, gen: Generator) -> Gst.PadProbeReturn:
     global g_count
     global g_cls_dict
+    global g_src_list
 
     gst_buffer = info.get_buffer()
     if not gst_buffer:
@@ -801,10 +840,15 @@ def probe_func(pad: Gst.Pad, info: Gst.PadProbeInfo, gen: Generator) -> Gst.PadP
                 lblPath = gen.lblPathFMT.format(count=g_count)
             else:
                 uri_name = os.path.basename(g_uri_list[source_idx]).split('.')[0]
+                if gen.input_type == InputType.IMAGE:
+                    filesrc = g_src_list[source_idx].get_by_name("filesrc%u" % source_idx)
+                    uri_name = uri_name % filesrc.get_property("index")
+
                 imgPath = gen.imgPathFMT.format(name=uri_name, fIdx=frame_idx, cIdx=stream_idx % 2)
                 lblPath = gen.lblPathFMT.format(name=uri_name, fIdx=frame_idx, cIdx=stream_idx % 2)
-            if not boxes and not gen.save_empty_label:
-                lblPath = ""
+
+            # if not boxes and not gen.save_empty_label:
+            #     lblPath = ""
 
             imgName = os.path.basename(imgPath)
             imgLbl = ImageLabel(imgName, boxes, width, height)
@@ -838,6 +882,10 @@ def bus_call(bus, message, gen: Generator):
         sys.stderr.write("Error: %s: %s\n" % (err, debug))
         gen.loop.quit()
 
+        # TODO: retry if GPU decode error
+        if "nvv4l2decoder0" in debug:
+            sys.stderr.write("Error: GPU decoder error, may CPU decoding resolve problem\n")
+
     elif t == Gst.MessageType.ELEMENT:
         struct = message.get_structure()
         if struct is not None and struct.has_name("stream-eos"):
@@ -854,6 +902,8 @@ def bus_call(bus, message, gen: Generator):
             gen.state = new_state
             if new_state == Gst.State.PLAYING:
                 gen.save_dot()
+                gen.start_workers()
+
     return True
 
 

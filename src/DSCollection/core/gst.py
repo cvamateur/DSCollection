@@ -19,14 +19,14 @@ def _assert_make_element(elem):
 
 
 def cb_pad_added(decodebin, new_pad, user_data):
-    nBin = user_data
+    nBin, use_cpu = user_data
     caps = new_pad.get_current_caps()
     gststruct = caps.get_structure(0)
     gstname = gststruct.get_name()
 
     if gstname.find("video") != -1:
         features = caps.get_features(0)
-        if features.contains("memory:NVMM"):
+        if use_cpu or features.contains("memory:NVMM"):
             bin_ghost_pad = nBin.get_static_pad("core")
             if not bin_ghost_pad.set_target(new_pad):
                 _exit_with_msg("Failed to link decoder core pad to source bin ghost pad")
@@ -51,7 +51,7 @@ def cb_child_added(child_proxy, Object, name, user_data):
         pass
 
 
-def build_uri_source(index: int, uri: str, skip_mode: int, interval: int, gpu_id: int):
+def build_uri_source(index: int, uri: str, skip_mode: int, interval: int, gpu_id: int, use_cpu: bool = False):
     """
     Create a new urideocdebin.
 
@@ -69,8 +69,19 @@ def build_uri_source(index: int, uri: str, skip_mode: int, interval: int, gpu_id
 
     decodebin = Gst.ElementFactory.make("uridecodebin")
     decodebin.set_property("uri", uri)
-    decodebin.connect("pad-added", cb_pad_added, nBin)
+    decodebin.connect("pad-added", cb_pad_added, (nBin, use_cpu))
     decodebin.connect("child-added", cb_child_added, (skip_mode, interval, gpu_id))
+    if use_cpu:
+        def cb_cpu_decoding(bin: Gst.Element, pad: Gst.Pad, caps: Gst.Caps, factory: Gst.ElementFactory, data: object):
+            fname = factory.get_plugin_name()
+            print("--- Try %s\n" % fname)
+            if fname == "nvvideo4linux2":
+                return 2
+            else:
+                return 0
+
+        print("Use CPU Decoding")
+        decodebin.connect("autoplug-select", cb_cpu_decoding, None)
 
     nBin.add(decodebin)
     ghost_src_pad = Gst.GhostPad.new_no_target("core", Gst.PadDirection.SRC)
@@ -171,7 +182,7 @@ def build_preprocess(index: int,
 
 
 def build_image_source(index: int,
-                       location: str = "%08d.png",
+                       location: str = "%08d.jpg",
                        start_index: int = 0,
                        width: int = 1296,
                        height: int = 1296,
@@ -184,20 +195,21 @@ def build_image_source(index: int,
 
     try:
         ext = location.split('.')[1]
+        if ext == "jpg": ext = "jpeg"
     except IndexError:
         sys.stderr.write(f"error: can not find filename extension from location: {location}\n")
         sys.exit(-1)
 
     # Multifiles source
-    multifiles = Gst.ElementFactory.make("multifilesrc")
+    multifiles = Gst.ElementFactory.make("multifilesrc", "filesrc%u" % index)
     multifiles.set_property("location", location)
     multifiles.set_property("index", start_index)
-    multifiles.set_property("caps", Gst.Caps.from_string(f"image/{ext},framerate=(fraction)1/1"))
+    multifiles.set_property("caps", Gst.Caps.from_string(f"image/{ext}"))
 
     # Image codec
     if ext == "png":
         imgdec = Gst.ElementFactory.make("pngdec")
-    elif ext in ("jpg", "jpeg"):
+    elif ext == "jpeg":
         imgdec = Gst.ElementFactory.make("jpegdec")
     else:
         sys.stderr.write("error: ext must be png or jpg\n")

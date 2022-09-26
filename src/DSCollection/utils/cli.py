@@ -181,10 +181,10 @@ def add_generate_task_arguments(parser: ArgumentParser):
     parser.add_argument("-s", "--show", action="store_true", help="Show pipeline.")
     parser.add_argument("-m", "--model", dest="models", action="append", default=[], help="Model config file.")
     parser.add_argument("-j", "--num-workers", type=int, help="Number workers.")
+    parser.add_argument("-f", "--force", action="store_true", help="Override original dataset")
     parser.add_argument("--ext", default=".jpg", help="Image file extension.")
     parser.add_argument("--drop-empty", action="store_true", help="Ignore images with empty labels.")
-    parser.add_argument("--save-empty-label", action="store_true",
-                        help="Generate empty label file even if no targe on image.")
+    # parser.add_argument("--save-empty-label", action="store_true", help="Generate empty label file even if no targe on image.")
     parser.add_argument("--max-srcs", type=int, help="Maximum number of sources (default: 1).")
     parser.add_argument("--skip-mode", type=int, help="Frame skipping mode. [0:all(default), 1:non_ref[Jetson], 2:key]")
     parser.add_argument("--interval", type=int, help="Frame interval to decode (default: 0).")
@@ -193,6 +193,8 @@ def add_generate_task_arguments(parser: ArgumentParser):
     parser.add_argument("--memory-type", type=int, default=3, help="NvBuf memory type.")
     parser.add_argument("--gpu-id", type=int, metavar="GPU_ID")
     parser.add_argument("--subdir", help="Subdirectory name")
+    parser.add_argument("--cpu-decoding", action="store_true", help="Use cpu decoding, not GPU.")
+    parser.add_argument("--timeout", type=int, default=200, help="Timeout of workers")
 
 
 def add_extract_task_arguments(parser: ArgumentParser):

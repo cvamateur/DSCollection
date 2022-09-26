@@ -25,6 +25,7 @@ def main(args):
     g = Generator(args.input, args.output, args.models, args.dtype, args.subdir, args.ext,
                   args.index, args.max_srcs, args.skip_mode, args.interval, args.gpu_id,
                   args.camera_shifts, args.crop_size, args.memory_type, args.num_workers,
-                  args.show, args.contiguous, args.drop_empty, args.save_empty_label)
+                  args.show, args.contiguous, args.drop_empty, args.force,
+                  args.cpu_decoding, args.timeout)
     g.run()
 

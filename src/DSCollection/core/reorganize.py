@@ -144,7 +144,7 @@ class DatasetSplitter:
 
         if drop:
             try:
-                os.remove(os.path.abspath(os.path.expanduser(root)))
+                shutil.rmtree(os.path.abspath(os.path.expanduser(root)))
             except PermissionError:
                 sys.stdout.write("Permission denied, unable to remove: %s\n" % root)
             else:
