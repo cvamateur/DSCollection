@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-matplotlib.use('TkAgg')
+# matplotlib.use('TkAgg')
 
 from queue import Queue
 from enum import IntEnum
@@ -157,7 +157,7 @@ class _Pyplot_Backend(_VisBackend):
         sys.stdout.write("Matplotlib backend: press 'q' to slide\n")
 
     def visualize(self, image: np.ndarray):
-        plt.subplot(self.rows, self.rows, self._i)
+        plt.subplot(self.rows, self.cols, self._i)
         plt.imshow(image[..., ::-1])
         if self._i == self.rows * self.cols:
             plt.show()

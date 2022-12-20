@@ -5,7 +5,7 @@ import ast
 import random
 import configparser
 from abc import ABC, abstractmethod
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import List, Tuple, Dict, Any, Union, Type
 
@@ -228,8 +228,8 @@ class VOC(Dataset, dtype=DatasetType.VOC):
                 labels.append(label)
             elif not skip_empty:
                 labels.append(ImageLabel(imgName, [], -1, -1, -1))
-            else:
-                sys.stderr.write(f"warn: skip image with empty label: {imgName}\n")
+            # else:
+            #     sys.stderr.write(f"warn: skip image with empty label: {imgName}\n")
         self.labels = labels
 
     @staticmethod
@@ -306,8 +306,8 @@ class COCO(Dataset, dtype=DatasetType.COCO):
     def __init__(self, root: str, *_, split: str = "train", year: int = 2017, **__):
         super(COCO, self).__init__(root, *_, **__)
         assert split in self.SPLITS, f"split must be one of {self.SPLITS}"
-        assert year in self.YEARS, f"year must be one of {self.YEARS}"
-        self.imgDirName = self.imgDirName.format(split=split, year=year)
+        assert int(year) in self.YEARS, f"year must be one of {self.YEARS}"
+        self.imgDirName = self.imgDirName.format(split=split, year=int(year))
 
     def load(self, clsNames: List[str] = None, nImgs: Union[int, float] = None, skip_empty: bool = True):
 
@@ -331,14 +331,15 @@ class COCO(Dataset, dtype=DatasetType.COCO):
             imgIds.update(imgId_list)
         imgIds = list(imgIds)
 
-        if isinstance(nImgs, float):
-            nImgs = int(nImgs * len(imgIds))
-        if isinstance(nImgs, int):
-            indices = random.sample(list(range(len(imgIds))), k=min(nImgs, len(imgIds)))
-            imgIds = [imgIds[i] for i in indices]
-        else:
-            msg = "nImgs must be an integer or float number"
-            raise RuntimeError(msg)
+        if nImgs is not None:
+            if isinstance(nImgs, float):
+                nImgs = int(nImgs * len(imgIds))
+            if isinstance(nImgs, int):
+                indices = random.sample(list(range(len(imgIds))), k=min(nImgs, len(imgIds)))
+                imgIds = [imgIds[i] for i in indices]
+            else:
+                msg = "nImgs must be an integer or float number"
+                raise RuntimeError(msg)
 
         labels = []
         for i, imgId in tqdm(enumerate(imgIds), desc="Load dataset", total=len(imgIds)):
@@ -392,6 +393,21 @@ class COCO(Dataset, dtype=DatasetType.COCO):
             return ImageLabel(imgName, boxes, width, height, depth), imgInfo
         else:
             return None, imgInfo
+
+    @classmethod
+    def check_is_correct_path(cls, root: str) -> bool:
+        for year in cls.YEARS:
+            for split in cls.SPLITS:
+                imgDirName = cls.imgDirName.format(split=split, year=year)
+                try:
+                    check_path(os.path.join(root, imgDirName), existence=True)
+                    check_path(os.path.join(root, cls.lblDirName), existence=True)
+                except FileNotFoundError:
+                    pass
+                else:
+                    return True
+
+        return False
 
 
 class WiderFace(Dataset):
@@ -591,7 +607,7 @@ class HT21(Dataset, dtype="ht21"):
         labels = []
         workers = min(os.cpu_count(), len(partitions))
         futures = []
-        with ProcessPoolExecutor(workers) as exe:
+        with ThreadPoolExecutor(workers) as exe:
             for part in partitions:
                 try:
                     lblFile = check_path(os.path.join(part, "det/det.txt"))

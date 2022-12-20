@@ -1,6 +1,10 @@
 import argparse
 import ast
 import sys
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning)
+
 from functools import partial
 
 from .tasks import TASK
@@ -27,7 +31,6 @@ class _EarlyStopAction(argparse.Action):
     Custom action that if option presents, just prints stop-info
     and exit the program.
     """
-
     def __init__(self, option_strings,
                  stop=None,
                  dest=argparse.SUPPRESS,
@@ -107,7 +110,7 @@ class _KwargsAction(argparse._StoreAction):
 
 
 def get_cli_parser() -> ArgumentParser:
-    mainParser = ArgumentParser(add_help=False, epilog=TASK.__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    mainParser = ArgumentParser(epilog=TASK.__doc__, formatter_class=argparse.RawTextHelpFormatter)
     mainParser.add_argument("-v", "--version", action="version", version=f"DSCollection {v}")
 
     # Parent parsers

@@ -30,11 +30,11 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     install_requires=[
-        "tqdm >= 4.5.0",
-        "pycocotools >= 2.0.2",
-        "pandas >= 1.3.0",
-        "numpy >= 1.17.0",
-        "matplotlib >= 3.3.0",
+        "tqdm",
+        "pycocotools",
+        "pandas",
+        "numpy",
+        "matplotlib",
     ],
     extras_require={
         "gst": ["pycairo >= 1.16.3", "PyGObject >= 3.32.0"],
