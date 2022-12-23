@@ -31,6 +31,7 @@ class _EarlyStopAction(argparse.Action):
     Custom action that if option presents, just prints stop-info
     and exit the program.
     """
+
     def __init__(self, option_strings,
                  stop=None,
                  dest=argparse.SUPPRESS,
@@ -63,6 +64,14 @@ class _OptSeqAction(argparse._StoreAction):
 
 
 _XSepAction: _OptSeqAction = partial(_OptSeqAction, sep="x")
+
+
+class _XSpecAndIntAction(_OptSeqAction):
+    def __call__(self, parser, namespace, value, option_string=None):
+        value = value.split('x')
+        if len(value) == 1 or not value[1]:
+            value = [value[0], value[0]]
+        super(_XSpecAndIntAction, self).__call__(parser, namespace, value, option_string)
 
 
 class _EvalValueAction(argparse._StoreAction):
@@ -122,7 +131,6 @@ def get_cli_parser() -> ArgumentParser:
 
     # Add generate task parser
     generateParser = tasks.add_parser(TASK.GENERATE, parents=[commParser, outTypeParser])
-    add_process_arguments(generateParser)
     add_generate_task_arguments(generateParser)
 
     # Add extract task parser
@@ -153,17 +161,18 @@ def get_cli_parser() -> ArgumentParser:
 
 
 def build_common_arguments(parser: ArgumentParser = None):
+    def require_output():
+        req = ("visualize" not in sys.argv) and \
+              ("-s" not in sys.argv) and \
+              ("--show" not in sys.argv)
+        return req
+
     if parser is None:
         parser = ArgumentParser(add_help=False)
+
     parser.add_argument("-i", "--input", nargs="+", required=True, help="Input video or directory.")
-    parser.add_argument("-o", "--output", required="visualize" not in sys.argv, help="Output directory.")
+    parser.add_argument("-o", "--output", required=require_output(), help="Output directory.")
     parser.add_argument("-c", "--contiguous", action="store_true", help="Rename files sequentially.")
-    return parser
-
-
-def add_process_arguments(parser: ArgumentParser):
-    parser.add_argument("--crop-size", type=int, help="Center crop size (default: 1296).")
-    parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image")
     return parser
 
 
@@ -197,12 +206,16 @@ def add_generate_task_arguments(parser: ArgumentParser):
     parser.add_argument("--gpu-id", type=int, metavar="GPU_ID")
     parser.add_argument("--subdir", help="Subdirectory name")
     parser.add_argument("--cpu-decoding", action="store_true", help="Use cpu decoding, not GPU.")
-    parser.add_argument("--timeout", type=int, default=200, help="Timeout of workers")
+    parser.add_argument("--timeout", type=int, default=500, help="Timeout of workers")
+    parser.add_argument("--crop-size", type=int, help="Center crop size (default: 1296).")
+    parser.add_argument("--grayscale", action="store_true", help="Convert to grayscale image")
 
 
 def add_extract_task_arguments(parser: ArgumentParser):
+    parser.add_argument("--ext", default=".jpg", help="Image file extension (Default: jpg).")
     parser.add_argument("-cls", "--classes", action=_OptSeqAction, help=f"Classes to extract, separate by '{OPTSEP}'.")
-    parser.add_argument("--ext", default=".jpg", help="Image file extension.")
+    parser.add_argument("-r", "--remap", action=_OptSeqAction,
+                        help=f"Map class names to new names, separated by '{OPTSEP}'.")
 
     gp = parser.add_mutually_exclusive_group()
     gp.add_argument("-n", "--num-images", dest="n_imgs", type=int, metavar="N",
@@ -257,6 +270,7 @@ def add_process_task_arguments(parser: ArgumentParser):
     parser.add_argument("--c1", dest="crop_mode", action="store_const", const=1, help="The number of cropped images.")
     parser.add_argument("--c3", dest="crop_mode", action="store_const", const=3, help="The number of cropped images.")
     parser.add_argument("--c5", dest="crop_mode", action="store_const", const=5, help="The number of cropped images.")
+    parser.add_argument("--cn", dest="crop_mode", action="store_const", const=0, help="Crop image as many as possible, crop-ratio is ignored.")
     parser.add_argument("--crop-ratio", type=float, default=1.0, help="The ratio of the cropped image.")
 
     parser.add_argument("--min-area", type=int, default=25 * 25, help="Minimum area that object will be ignored.")

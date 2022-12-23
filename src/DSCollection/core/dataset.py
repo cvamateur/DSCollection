@@ -132,9 +132,13 @@ class Dataset(ABC):
         return root
 
     @classmethod
-    def find_dataset(cls, root: str) -> Union[Type["Dataset"], None]:
+    def find_dataset(cls, root: str, imgDirName: str = None, lblDirName: str = None) -> Union[Type["Dataset"], None]:
         check_path(root, existence=True)
         for klass in cls._known_ds.values():
+            if imgDirName is not None:
+                klass.imgDirName = imgDirName
+            if lblDirName is not None:
+                klass.lblDirName = lblDirName
             if klass.check_is_correct_path(root):
                 return klass
         return None
@@ -440,8 +444,10 @@ class Brainwash(Dataset, dtype="brainwash"):
     lblDirName = ""
 
     def __init__(self, root: str, *_, split: str = "train", **__):
+        if split is None or split not in Brainwash.SPLITS:
+            msg = f"error: brainwash dataset requires `split` be to one of {Brainwash.SPLITS}"
+            raise RuntimeError(msg)
         super(Brainwash, self).__init__(root, *_, **__)
-        assert split is not None, "split is not given"
         self.lblPath = check_path(os.path.join(self.root, f"brainwash_{split}.idl"))
 
     @classmethod

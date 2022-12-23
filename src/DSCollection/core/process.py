@@ -8,6 +8,7 @@ import math
 import os
 import shutil
 import sys
+from math import ceil
 from concurrent.futures import ThreadPoolExecutor, wait, ALL_COMPLETED, Future
 from os.path import join as path_join
 from typing import List, Tuple, Dict
@@ -24,7 +25,7 @@ from ..utils.imgutil import ImageUtil
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-CHUNK_SIZE = 10
+CHUNK_SIZE = 1
 MAX_WORKER = os.cpu_count() - 1
 
 
@@ -201,6 +202,19 @@ class Process:
 
         return s
 
+    @staticmethod
+    def _cut_many(img_size: Tuple[int, int], tw: int, th: int):
+        ih, iw = img_size
+        nh, nw = ceil(ih / th), ceil(iw / tw)
+        gh = 0 if nh == 1 else (ih - th) // (nh - 1)
+        gw = 0 if nw == 1 else (iw - tw) // (nw - 1)
+        s = set()
+        for i in range(nh):
+            for j in range(nw):
+                sy, sx = i * gh, j * gw
+                s.add((sx, sy, sx + tw, sy + th))
+        return s
+
     @classmethod
     def cal_roi(cls, img_size: Tuple[int, int], tw: int, th: int, crop_mode: int, crop_ratio: float):
         ih, iw = img_size
@@ -212,6 +226,8 @@ class Process:
         elif crop_mode == 5:
             cx1, cy1, cx2, cy2 = cls._percent_crop2(img_size, tw, th, crop_ratio)
             return cls._five_cut(cx1, cy1, cx2, cy2, iw, ih)
+        elif crop_mode == 0:
+            return cls._cut_many(img_size, tw, th)
         else:
             raise NotImplementedError("crop-mode: %d", crop_mode)
 
@@ -348,13 +364,11 @@ class Process:
                 filename, ext = os.path.splitext(lbl_info.imgName.replace('/', '-'))
                 img_name = f"{filename}-{roiIdx}-{self.img_ext}"
                 lab_name = f"{filename}-{roiIdx}-{self.convertor.lblExt}"
-
             if len(lbl.boxes) == 0 and not keep_emp_lbl:
                 continue
 
             img_path = path_join(self.output, self.convertor.imgDirName, img_name)
             lbl_path = path_join(self.output, self.convertor.lblDirName, lab_name)
-
             future = self.executor.submit(self._save, img_path, lbl_path, img, lbl_info, width, height, self.img_ext)
             futures.append(future)
             self._count += 1
@@ -390,11 +404,13 @@ class Process:
                                                       min_area=args.min_area,
                                                       max_ratio=args.max_ratio,
                                                       min_ratio=args.min_ratio,
-                                                      scale=height / (roi[3] - roi[1]))
+                                                      scale=height / (roi[3] - roi[1]),
+                                                      verbose=args.verbose)
 
                     if not keeps and not keep_emp_lbl:
-                        sys.stderr.write(f"skip: got empty label while `c{args.crop_mode}` "
-                                         f"processing the {i}-th roi from image: {label.fileName}\n")
+                        if args.verbose:
+                            sys.stderr.write(f"skip: got empty label while `c{args.crop_mode}` "
+                                             f"processing the {i}-th roi from image: {label.fileName}\n")
                         if not args.show:
                             continue
 

@@ -3,7 +3,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.DSCollection import TaskDispatcher, get_cli_parser
+from src.DSCollection._DSCollection import TaskDispatcher, get_cli_parser
 
 
 def main():

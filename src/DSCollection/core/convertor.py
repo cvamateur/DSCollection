@@ -1,7 +1,7 @@
 import os.path
 import dataclasses
 from abc import ABC, abstractmethod
-from concurrent.futures import as_completed, ProcessPoolExecutor
+from concurrent.futures import as_completed, ThreadPoolExecutor
 from typing import Dict, Any, List, Type, Union
 
 from tqdm import tqdm
@@ -57,6 +57,9 @@ class Convertor(ABC):
     imgDirName = "images"
     lblDirName = "labels"
 
+    def __init__(self, clsmap: Dict[str, str] = None):
+        self.clsmap = clsmap if clsmap else {}
+
     @classmethod
     def from_type(cls, dtype: str, *args, **kwargs) -> "Convertor":
         if dtype not in cls._known_cvt:
@@ -78,7 +81,6 @@ class Convertor(ABC):
     def convert(self, ds: Dataset) -> List[LabelInfo]:
         raise NotImplementedError
 
-    @abstractmethod
     def convert_label(self, index: int, label: ImageLabel) -> LabelInfo:
         raise NotImplementedError
 
@@ -87,14 +89,18 @@ class Convertor(ABC):
         if dtype is not None:
             cls._known_cvt[dtype] = cls
 
+    def get_clsname(self, name: str):
+        new_name = self.clsmap.get(name, None)
+        return name if new_name is None else new_name
+
 
 class VOCConvertor(Convertor, dtype=DatasetType.VOC):
     lblExt = ".xml"
     imgDirName = "JPEGImages"
     lblDirName = "Annotations"
 
-    def __init__(self):
-        super(VOCConvertor, self).__init__()
+    def __init__(self, clsmap: Dict[str, str] = None):
+        super(VOCConvertor, self).__init__(clsmap)
         self.n_workers = os.cpu_count() - 1
         self._last_n = 0
 
@@ -102,7 +108,7 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
         results: List[Union[LabelInfo, None]] = [None] * len(ds.labels)
 
         futures = []
-        with ProcessPoolExecutor(self.n_workers) as executor:
+        with ThreadPoolExecutor(self.n_workers) as executor:
             for i, label in enumerate(ds.labels):
                 future = executor.submit(self.convert_label, self._last_n + i, label)
                 futures.append(future)
@@ -114,8 +120,7 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
         self._last_n += len(ds.labels)
         return results
 
-    @staticmethod
-    def _label_dict(label: ImageLabel) -> Dict[str, Any]:
+    def _label_dict(self, label: ImageLabel) -> Dict[str, Any]:
         d = {
             "filename": label.fileName,
             "size": {
@@ -127,7 +132,7 @@ class VOCConvertor(Convertor, dtype=DatasetType.VOC):
         }
         for box in label.boxes:
             box_dict = {
-                "name": box.name,
+                "name": self.get_clsname(box.name),
                 "truncated": 0,
                 "difficult": 0,
                 "bndbox": {
@@ -161,5 +166,5 @@ class KITTIConvertor(VOCConvertor, dtype=DatasetType.KITTI):
 
     def cvt_label_bytes(self, label: ImageLabel) -> bytes:
         label_fmt = "{} 0 0 0 {} {} {} {} 0 0 0 0 0 0 0"
-        kitti_lines = [label_fmt.format(box.name, *box.coord) for box in label.boxes]
+        kitti_lines = [label_fmt.format(self.get_clsname(box.name), *box.coord) for box in label.boxes]
         return '\n'.join(kitti_lines).encode("utf-8")
